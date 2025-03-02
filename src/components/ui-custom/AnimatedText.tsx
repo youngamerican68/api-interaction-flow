@@ -30,18 +30,12 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
           if (entry.isIntersecting) {
             setTimeout(() => {
               if (elementRef.current) {
-                switch (animation) {
-                  case "fade":
-                    elementRef.current.classList.add("animate-fade-in");
-                    break;
-                  case "slide":
-                    elementRef.current.classList.add("animate-slide-up");
-                    break;
-                  case "typewriter":
-                    // Implement typewriter animation logic if needed
-                    break;
-                  default:
-                    break;
+                if (animation === "fade") {
+                  elementRef.current.classList.add("animate-fade-in");
+                } else if (animation === "slide") {
+                  elementRef.current.classList.add("animate-slide-up");
+                } else if (animation === "typewriter") {
+                  // Implement typewriter animation logic if needed
                 }
               }
             }, delay * 1000);
@@ -61,16 +55,15 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
     };
   }, [animation, delay]);
 
-  const animationClasses = () => {
-    switch (animation) {
-      case "fade":
-        return "opacity-0";
-      case "slide":
-        return "opacity-0 translate-y-4";
-      case "typewriter":
-        return ""; // Add typewriter specific classes if needed
-      default:
-        return "";
+  const getAnimationClasses = () => {
+    if (animation === "fade") {
+      return "opacity-0";
+    } else if (animation === "slide") {
+      return "opacity-0 translate-y-4";
+    } else if (animation === "typewriter") {
+      return ""; // Add typewriter specific classes if needed
+    } else {
+      return "";
     }
   };
 
@@ -80,7 +73,7 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
       style={{ animationDuration: `${duration}s` }}
       className={cn(
         "will-change-transform text-balance",
-        animation !== "none" && animationClasses(),
+        animation !== "none" && getAnimationClasses(),
         className
       )}
     >

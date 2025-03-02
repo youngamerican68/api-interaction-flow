@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Container } from "@/components/ui-custom/Container";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui-custom/Card";
@@ -108,7 +107,7 @@ const ViralDetector = () => {
                     {isMonitoring ? (
                       <Button 
                         onClick={stopMonitoring} 
-                        variant="destructive"
+                        variant="accent"
                         isLoading={isLoading}
                       >
                         Stop Monitoring

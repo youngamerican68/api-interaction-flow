@@ -3,7 +3,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost" | "accent" | "outline";
+  variant?: "primary" | "secondary" | "ghost" | "accent" | "outline" | "minimal";
   size?: "sm" | "md" | "lg" | "icon";
   isLoading?: boolean;
   icon?: React.ReactNode;
@@ -27,7 +27,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-2 focus:ring-secondary/20 focus:ring-offset-2 transition-all",
       ghost: "bg-transparent hover:bg-secondary focus:ring-2 focus:ring-secondary/20 transition-all",
       accent: "bg-accent text-accent-foreground hover:opacity-90 focus:ring-2 focus:ring-accent/20 focus:ring-offset-2 transition-all",
-      outline: "bg-transparent border border-input hover:bg-secondary/50 focus:ring-2 focus:ring-primary/20 transition-all"
+      outline: "bg-transparent border border-input hover:bg-secondary/50 focus:ring-2 focus:ring-primary/20 transition-all",
+      minimal: "bg-transparent hover:bg-secondary/50 focus:ring-2 focus:ring-primary/20 transition-all text-foreground"
     };
 
     const sizes = {

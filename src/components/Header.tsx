@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { MenuIcon, X } from "lucide-react";
 import { Container } from "./ui-custom/Container";
 import { Button } from "./ui-custom/Button";
@@ -9,6 +9,12 @@ import { cn } from "@/lib/utils";
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const location = useLocation();
+  
+  // Hide header on viral-detector page
+  if (location.pathname === "/viral-detector") {
+    return null;
+  }
 
   const navigation = [
     { name: "Home", href: "/" },

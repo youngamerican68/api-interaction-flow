@@ -3,7 +3,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: "default" | "glass" | "outlined";
+  variant?: "default" | "glass" | "outlined" | "minimal";
   hoverEffect?: boolean;
 }
 
@@ -12,7 +12,8 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
     const variants = {
       default: "bg-card shadow-subtle",
       glass: "glass-effect",
-      outlined: "border border-border bg-transparent"
+      outlined: "border border-border bg-transparent",
+      minimal: "bg-card"
     };
     
     return (

@@ -1,9 +1,16 @@
 
 import { Container } from "./ui-custom/Container";
 import { Github, Twitter, Zap } from "lucide-react";
+import { useLocation } from "react-router-dom";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+  const location = useLocation();
+  
+  // Hide footer on viral-detector page
+  if (location.pathname === "/viral-detector") {
+    return null;
+  }
 
   return (
     <footer className="border-t border-border py-12">

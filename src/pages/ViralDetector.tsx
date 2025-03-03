@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Container } from "@/components/ui-custom/Container";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui-custom/Card";
@@ -28,14 +27,14 @@ const ViralDetector = () => {
   const [hasCredentials, setHasCredentials] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check if Twitch credentials are set
   useEffect(() => {
     const clientId = localStorage.getItem('twitch_client_id');
     const clientSecret = localStorage.getItem('twitch_client_secret');
-    setHasCredentials(!!clientId && !!clientSecret);
+    const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
     
-    // If no credentials are set, show a one-time info toast
-    if (!clientId || !clientSecret) {
+    setHasCredentials(useHardcodedKeys || (!!clientId && !!clientSecret));
+    
+    if (!useHardcodedKeys && (!clientId || !clientSecret)) {
       toast.info(
         "Please set your Twitch API credentials in Settings to start monitoring",
         { id: "credentials-missing", duration: 5000 }
@@ -43,7 +42,6 @@ const ViralDetector = () => {
     }
   }, [isSettingsOpen]);
 
-  // Clean up interval on unmount
   useEffect(() => {
     return () => {
       if (monitoringInterval) {
@@ -59,7 +57,6 @@ const ViralDetector = () => {
       const moments = await detectViralMoments();
       
       if (moments.length > 0) {
-        // Only notify for new clips when monitoring
         if (isMonitoring && viralClips.length > 0) {
           const newClips = moments.filter(
             newClip => !viralClips.some(existingClip => existingClip.id === newClip.id)
@@ -89,9 +86,7 @@ const ViralDetector = () => {
     
     setIsLoading(true);
     
-    // Initial fetch
     fetchViralMoments().then(() => {
-      // Set up polling interval (every 2 minutes)
       const intervalId = window.setInterval(fetchViralMoments, 2 * 60 * 1000);
       setMonitoringInterval(intervalId as unknown as number);
       setIsMonitoring(true);
@@ -103,7 +98,6 @@ const ViralDetector = () => {
   const stopMonitoring = () => {
     setIsLoading(true);
     
-    // Clear interval
     if (monitoringInterval) {
       clearInterval(monitoringInterval);
       setMonitoringInterval(null);

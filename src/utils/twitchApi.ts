@@ -5,6 +5,10 @@ import { toast } from "sonner";
 const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/token';
 const TWITCH_API_BASE = 'https://api.twitch.tv/helix';
 
+// Your hardcoded Twitch API credentials (replace these with your actual credentials)
+const HARDCODED_CLIENT_ID = 'your_client_id_here';
+const HARDCODED_CLIENT_SECRET = 'your_client_secret_here';
+
 // Types for Twitch API responses
 interface TwitchAuthResponse {
   access_token: string;
@@ -61,9 +65,25 @@ export const getTwitchAuthToken = async (): Promise<string> => {
   }
 
   try {
-    // Get client ID and secret from local storage (user provided)
-    const clientId = localStorage.getItem('twitch_client_id');
-    const clientSecret = localStorage.getItem('twitch_client_secret');
+    // Check if we're using hardcoded keys
+    const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
+    
+    let clientId, clientSecret;
+    
+    if (useHardcodedKeys) {
+      // Use the hardcoded credentials
+      clientId = HARDCODED_CLIENT_ID;
+      clientSecret = HARDCODED_CLIENT_SECRET;
+      
+      // Validate hardcoded credentials
+      if (clientId === 'your_client_id_here' || clientSecret === 'your_client_secret_here') {
+        throw new Error('The application is configured to use built-in API credentials, but they have not been set. Please contact the administrator.');
+      }
+    } else {
+      // Get client ID and secret from local storage (user provided)
+      clientId = localStorage.getItem('twitch_client_id');
+      clientSecret = localStorage.getItem('twitch_client_secret');
+    }
 
     if (!clientId || !clientSecret) {
       throw new Error('Twitch API credentials not found. Please set them in the settings.');
@@ -98,7 +118,10 @@ export const getTwitchAuthToken = async (): Promise<string> => {
 export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
   try {
     const token = await getTwitchAuthToken();
-    const clientId = localStorage.getItem('twitch_client_id');
+    
+    // Get client ID based on whether we're using hardcoded keys
+    const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
+    const clientId = useHardcodedKeys ? HARDCODED_CLIENT_ID : localStorage.getItem('twitch_client_id');
 
     if (!clientId) {
       throw new Error('Twitch client ID not found');
@@ -130,7 +153,10 @@ export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
 export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): Promise<TwitchClip[]> => {
   try {
     const token = await getTwitchAuthToken();
-    const clientId = localStorage.getItem('twitch_client_id');
+    
+    // Get client ID based on whether we're using hardcoded keys
+    const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
+    const clientId = useHardcodedKeys ? HARDCODED_CLIENT_ID : localStorage.getItem('twitch_client_id');
 
     if (!clientId) {
       throw new Error('Twitch client ID not found');

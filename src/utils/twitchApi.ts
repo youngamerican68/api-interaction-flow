@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 
 // Twitch API endpoints
@@ -181,10 +182,13 @@ export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Twitch streams API error:', errorText);
       throw new Error(`Failed to fetch streams: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
+    console.log(`Fetched ${data.data.length} top streams`);
     return data.data as TwitchStream[];
   } catch (error) {
     console.error('Error fetching Twitch streams:', error);
@@ -208,29 +212,32 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
       throw new Error('Twitch client ID not found');
     }
 
-    // Get clips from the last 24 hours
+    // Get clips from the last 7 days instead of just 24 hours to increase chances of finding clips
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 1);
+    startDate.setDate(startDate.getDate() - 7);
     
-    const response = await fetch(
-      `${TWITCH_API_BASE}/clips?broadcaster_id=${broadcasterId}&first=${limit}&started_at=${startDate.toISOString()}`, 
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Client-Id': clientId,
-        }
+    const url = `${TWITCH_API_BASE}/clips?broadcaster_id=${broadcasterId}&first=${limit}&started_at=${startDate.toISOString()}`;
+    console.log(`Fetching clips for broadcaster ${broadcasterId} with URL: ${url}`);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Client-Id': clientId,
       }
-    );
+    });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Twitch clips API error for broadcaster ${broadcasterId}:`, errorText);
       throw new Error(`Failed to fetch clips: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
+    console.log(`Fetched ${data.data.length} clips for broadcaster ${broadcasterId}`);
     return data.data as TwitchClip[];
   } catch (error) {
-    console.error('Error fetching Twitch clips:', error);
-    toast.error(error instanceof Error ? error.message : 'Failed to fetch Twitch clips');
+    console.error(`Error fetching Twitch clips for broadcaster ${broadcasterId}:`, error);
+    // Don't show toast for individual clip fetch errors to avoid spamming
     throw error;
   }
 };
@@ -249,12 +256,20 @@ export const detectViralMoments = async (): Promise<{
   timestamp: string;
 }[]> => {
   try {
+    console.log('Starting viral moment detection...');
+    
     // 1. First get top streams
     const topStreams = await getTopStreams(20);
+    console.log(`Processing ${topStreams.length} top streams for viral clips`);
+    
+    if (topStreams.length === 0) {
+      console.log('No streams found, cannot detect viral moments');
+      return [];
+    }
     
     // 2. For each stream, get recent clips
     const allClipsPromises = topStreams.map(stream => 
-      getClipsForBroadcaster(stream.user_id)
+      getClipsForBroadcaster(stream.user_id, 10) // Increase clips per streamer to 10
         .then(clips => {
           // Attach stream data to each clip
           return clips.map(clip => ({
@@ -262,27 +277,47 @@ export const detectViralMoments = async (): Promise<{
             stream
           }));
         })
-        .catch(() => []) // If fetching clips fails for a stream, return empty array
+        .catch(error => {
+          console.error(`Error getting clips for streamer ${stream.user_name}:`, error);
+          return []; // If fetching clips fails for a stream, return empty array
+        })
     );
     
     const allClipsResults = await Promise.all(allClipsPromises);
     const allClips = allClipsResults.flat();
     
+    console.log(`Found ${allClips.length} total clips across all streamers`);
+    
+    if (allClips.length === 0) {
+      console.log('No clips found, cannot detect viral moments');
+      toast.info('No recent clips found from top streamers. Try again later.');
+      return [];
+    }
+    
     // 3. Score and filter clips based on "virality" algorithm
-    // In a real app this would be more sophisticated
-    return allClips
-      .filter(item => item.clip.view_count > 50) // Basic filter for demo
+    // Make more lenient by lowering the view threshold to 5 instead of 50
+    const viralClips = allClips
+      .filter(item => item.clip.view_count > 5) // Much more lenient filter
       .sort((a, b) => b.clip.view_count - a.clip.view_count) // Sort by view count
-      .slice(0, 10) // Take top 10
-      .map(item => ({
-        id: item.clip.id,
-        streamerName: item.clip.broadcaster_name,
-        viewerCount: item.stream.viewer_count,
-        chatActivity: Math.floor(Math.random() * 150) + 30, // Simulated chat activity
-        clipUrl: item.clip.url,
-        thumbnailUrl: item.clip.thumbnail_url,
-        timestamp: item.clip.created_at
-      }));
+      .slice(0, 10); // Take top 10
+    
+    console.log(`Found ${viralClips.length} potential viral clips after filtering`);
+    
+    if (viralClips.length === 0) {
+      console.log('No clips met the virality threshold');
+      toast.info('No viral clips detected. Try again later.');
+      return [];
+    }
+    
+    return viralClips.map(item => ({
+      id: item.clip.id,
+      streamerName: item.clip.broadcaster_name,
+      viewerCount: item.stream.viewer_count,
+      chatActivity: Math.floor(Math.random() * 150) + 30, // Simulated chat activity
+      clipUrl: item.clip.url,
+      thumbnailUrl: item.clip.thumbnail_url,
+      timestamp: item.clip.created_at
+    }));
   } catch (error) {
     console.error('Error detecting viral moments:', error);
     toast.error('Failed to detect viral moments');

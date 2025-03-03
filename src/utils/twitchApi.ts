@@ -67,6 +67,7 @@ export const getTwitchAuthToken = async (): Promise<string> => {
   try {
     // Check if we're using hardcoded keys
     const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
+    const isPublicClient = localStorage.getItem('is_public_client') === 'true';
     
     let clientId, clientSecret;
     
@@ -82,19 +83,47 @@ export const getTwitchAuthToken = async (): Promise<string> => {
     } else {
       // Get client ID and secret from local storage (user provided)
       clientId = localStorage.getItem('twitch_client_id');
-      clientSecret = localStorage.getItem('twitch_client_secret');
+      
+      if (!isPublicClient) {
+        clientSecret = localStorage.getItem('twitch_client_secret');
+      }
     }
 
-    if (!clientId || !clientSecret) {
+    if (!clientId) {
       throw new Error('Twitch API credentials not found. Please set them in the settings.');
     }
 
+    let authParams;
+    let url = TWITCH_AUTH_URL;
+
+    if (isPublicClient && !useHardcodedKeys) {
+      // For public clients, use the client credentials without a secret
+      // Note: This actually uses the client credentials flow with no secret
+      authParams = new URLSearchParams({
+        client_id: clientId,
+        grant_type: 'client_credentials'
+      });
+    } else {
+      // For confidential clients or hardcoded keys, use both ID and secret
+      if (!clientSecret) {
+        throw new Error('Twitch Client Secret not found. Public clients should enable the "Public Client" option.');
+      }
+      
+      authParams = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'client_credentials'
+      });
+    }
+
     // Request a new token
-    const response = await fetch(`${TWITCH_AUTH_URL}?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`, {
+    const response = await fetch(`${url}?${authParams.toString()}`, {
       method: 'POST',
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Twitch auth error response:', errorText);
       throw new Error(`Authentication failed: ${response.status} ${response.statusText}`);
     }
 

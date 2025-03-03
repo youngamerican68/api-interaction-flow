@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 // Twitch API endpoints
@@ -56,6 +55,41 @@ let authToken: string | null = null;
 let tokenExpiration: number | null = null;
 
 /**
+ * Validate if we have proper credentials set up
+ */
+const validateCredentials = () => {
+  const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
+  const isPublicClient = localStorage.getItem('is_public_client') === 'true';
+  const clientId = useHardcodedKeys ? HARDCODED_CLIENT_ID : localStorage.getItem('twitch_client_id');
+  const clientSecret = useHardcodedKeys ? HARDCODED_CLIENT_SECRET : localStorage.getItem('twitch_client_secret');
+  
+  // Check if we're using hardcoded keys and they're valid
+  if (useHardcodedKeys) {
+    if (clientId === 'your_client_id_here' || clientSecret === 'your_client_secret_here') {
+      throw new Error('The application is configured to use built-in API credentials, but they have not been set. Please contact the administrator.');
+    }
+    return true;
+  }
+  
+  // For custom credentials
+  if (!clientId) {
+    throw new Error('Twitch API Client ID not found. Please set it in the settings.');
+  }
+  
+  // For custom credentials with public client
+  if (isPublicClient) {
+    return true;
+  }
+  
+  // For custom credentials with confidential client
+  if (!clientSecret) {
+    throw new Error('Twitch Client Secret not found. Public clients should enable the "Public Client" option.');
+  }
+  
+  return true;
+};
+
+/**
  * Get the Twitch API authentication token
  */
 export const getTwitchAuthToken = async (): Promise<string> => {
@@ -65,6 +99,9 @@ export const getTwitchAuthToken = async (): Promise<string> => {
   }
 
   try {
+    // Validate credentials before proceeding
+    validateCredentials();
+    
     // Check if we're using hardcoded keys
     const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
     const isPublicClient = localStorage.getItem('is_public_client') === 'true';
@@ -75,11 +112,6 @@ export const getTwitchAuthToken = async (): Promise<string> => {
       // Use the hardcoded credentials
       clientId = HARDCODED_CLIENT_ID;
       clientSecret = HARDCODED_CLIENT_SECRET;
-      
-      // Validate hardcoded credentials
-      if (clientId === 'your_client_id_here' || clientSecret === 'your_client_secret_here') {
-        throw new Error('The application is configured to use built-in API credentials, but they have not been set. Please contact the administrator.');
-      }
     } else {
       // Get client ID and secret from local storage (user provided)
       clientId = localStorage.getItem('twitch_client_id');
@@ -89,36 +121,22 @@ export const getTwitchAuthToken = async (): Promise<string> => {
       }
     }
 
-    if (!clientId) {
-      throw new Error('Twitch API credentials not found. Please set them in the settings.');
-    }
+    let authParams = new URLSearchParams({
+      client_id: clientId!,
+      grant_type: 'client_credentials'
+    });
 
-    let authParams;
-    let url = TWITCH_AUTH_URL;
-
-    if (isPublicClient && !useHardcodedKeys) {
-      // For public clients, use the client credentials without a secret
-      // Note: This actually uses the client credentials flow with no secret
-      authParams = new URLSearchParams({
-        client_id: clientId,
-        grant_type: 'client_credentials'
-      });
-    } else {
-      // For confidential clients or hardcoded keys, use both ID and secret
-      if (!clientSecret) {
-        throw new Error('Twitch Client Secret not found. Public clients should enable the "Public Client" option.');
-      }
-      
-      authParams = new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'client_credentials'
-      });
+    if (!isPublicClient || useHardcodedKeys) {
+      authParams.append('client_secret', clientSecret!);
     }
 
     // Request a new token
-    const response = await fetch(`${url}?${authParams.toString()}`, {
+    const response = await fetch(`${TWITCH_AUTH_URL}`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: authParams.toString()
     });
 
     if (!response.ok) {
@@ -136,7 +154,6 @@ export const getTwitchAuthToken = async (): Promise<string> => {
     return authToken;
   } catch (error) {
     console.error('Twitch authentication error:', error);
-    toast.error(error instanceof Error ? error.message : 'Failed to authenticate with Twitch');
     throw error;
   }
 };

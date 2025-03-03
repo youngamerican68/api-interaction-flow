@@ -27,20 +27,30 @@ const ViralDetector = () => {
   const [hasCredentials, setHasCredentials] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const checkCredentials = () => {
     const clientId = localStorage.getItem('twitch_client_id');
     const clientSecret = localStorage.getItem('twitch_client_secret');
     const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
+    const isPublicClient = localStorage.getItem('is_public_client') === 'true';
     
-    setHasCredentials(useHardcodedKeys || (!!clientId && !!clientSecret));
+    const validCredentials = useHardcodedKeys || 
+      (!!clientId && (isPublicClient || !!clientSecret));
     
-    if (!useHardcodedKeys && (!clientId || !clientSecret)) {
+    setHasCredentials(validCredentials);
+    
+    if (!validCredentials) {
       toast.info(
         "Please set your Twitch API credentials in Settings to start monitoring",
         { id: "credentials-missing", duration: 5000 }
       );
     }
-  }, [isSettingsOpen]);
+    
+    return validCredentials;
+  };
+
+  useEffect(() => {
+    checkCredentials();
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -115,6 +125,10 @@ const ViralDetector = () => {
     }
     
     fetchViralMoments();
+  };
+
+  const handleSettingsSaved = () => {
+    checkCredentials();
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -294,7 +308,8 @@ const ViralDetector = () => {
       
       <TwitchSettings 
         isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
+        onClose={() => setIsSettingsOpen(false)}
+        onSettingsSaved={handleSettingsSaved}
       />
     </div>
   );

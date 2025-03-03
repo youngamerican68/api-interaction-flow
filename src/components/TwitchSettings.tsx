@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { X, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui-custom/Card';
@@ -8,9 +9,10 @@ import { Switch } from '@/components/ui/switch';
 interface TwitchSettingsProps {
   isOpen: boolean;
   onClose: () => void;
+  onSettingsSaved?: () => void;
 }
 
-const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose }) => {
+const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose, onSettingsSaved }) => {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [useHardcodedKeys, setUseHardcodedKeys] = useState(false);
@@ -53,6 +55,7 @@ const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose }) => {
       // Save to localStorage
       localStorage.setItem('twitch_client_id', clientId);
       localStorage.setItem('is_public_client', isPublicClient.toString());
+      localStorage.setItem('use_hardcoded_keys', 'false');
       
       if (isPublicClient) {
         // For public clients, we can clear the secret
@@ -61,8 +64,12 @@ const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose }) => {
         localStorage.setItem('twitch_client_secret', clientSecret);
       }
       
-      localStorage.setItem('use_hardcoded_keys', 'false');
       toast.success('Twitch API credentials saved');
+    }
+    
+    // Call the onSettingsSaved callback if provided
+    if (onSettingsSaved) {
+      onSettingsSaved();
     }
     
     onClose();

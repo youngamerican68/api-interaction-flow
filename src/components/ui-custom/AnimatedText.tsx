@@ -54,24 +54,24 @@ export const AnimatedText: React.FC<AnimatedTextProps> = ({
 
   if (!isMounted) {
     // Using a simplified component rendering during SSR/before mount
-    const Component = tag;
-    return <Component className={className}>{text}</Component>;
+    const Component = tag as keyof JSX.IntrinsicElements;
+    return React.createElement(Component, { className }, text);
   }
 
   const selectedAnimation = animations[animation];
   const transition = { duration, delay, ease: 'easeOut' };
 
-  // Define the component dynamically
-  const Component = motion[tag] || motion.div;
+  // Define the component dynamically based on the tag
+  const MotionComponent = motion[tag as keyof typeof motion] || motion.div;
 
   return (
-    <Component
+    <MotionComponent
       initial={selectedAnimation.initial}
       animate={selectedAnimation.animate}
       transition={transition}
       className={cn(className)}
     >
       {text}
-    </Component>
+    </MotionComponent>
   );
 };

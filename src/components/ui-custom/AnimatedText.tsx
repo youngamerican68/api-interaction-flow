@@ -61,12 +61,12 @@ export const AnimatedText: React.FC<AnimatedTextProps> = ({
   const selectedAnimation = animations[animation];
   const transition = { duration, delay, ease: 'easeOut' };
 
-  // Create a properly typed motion component
-  const MotionTag = motion[tag as keyof typeof motion];
+  // Render using createElement for better type safety
+  const Component = tag;
   
-  // Use the correctly typed component or fallback to div
+  // Safely construct the motion component
   return React.createElement(
-    MotionTag || motion.div,
+    motion[Component as keyof typeof motion] || motion.div,
     {
       initial: selectedAnimation.initial,
       animate: selectedAnimation.animate,

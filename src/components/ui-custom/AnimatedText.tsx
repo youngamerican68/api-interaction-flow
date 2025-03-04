@@ -61,17 +61,18 @@ export const AnimatedText: React.FC<AnimatedTextProps> = ({
   const selectedAnimation = animations[animation];
   const transition = { duration, delay, ease: 'easeOut' };
 
-  // Define the component dynamically based on the tag
-  const MotionComponent = motion[tag as keyof typeof motion] || motion.div;
-
-  return (
-    <MotionComponent
-      initial={selectedAnimation.initial}
-      animate={selectedAnimation.animate}
-      transition={transition}
-      className={cn(className)}
-    >
-      {text}
-    </MotionComponent>
+  // Create a properly typed motion component
+  const MotionTag = motion[tag as keyof typeof motion];
+  
+  // Use the correctly typed component or fallback to div
+  return React.createElement(
+    MotionTag || motion.div,
+    {
+      initial: selectedAnimation.initial,
+      animate: selectedAnimation.animate,
+      transition,
+      className: cn(className)
+    },
+    text
   );
 };

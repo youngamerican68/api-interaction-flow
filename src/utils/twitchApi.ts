@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 // Twitch API endpoints
@@ -412,7 +411,6 @@ const generateMockStreams = (limit: number): TwitchStream[] => {
  * Generate mock clips for demo purposes
  */
 const generateMockClips = (broadcasterId: string, limit: number): TwitchClip[] => {
-  // Find broadcaster name based on ID
   const streamers = [
     { id: '1234567', login: 'ninja', name: 'Ninja' },
     { id: '2345678', login: 'pokimane', name: 'Pokimane' },
@@ -455,11 +453,12 @@ const generateMockClips = (broadcasterId: string, limit: number): TwitchClip[] =
     const views = Math.floor(Math.random() * 5000) + 20;
     const created = new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString();
     const duration = Math.floor(Math.random() * 50) + 10;
+    const clipId = `demo-${broadcasterId}-${i}`;
     
     return {
-      id: `clip${broadcasterId}${i}`,
-      url: `https://clips.twitch.tv/clip/${broadcasterId}${i}`,
-      embed_url: `https://clips.twitch.tv/embed?clip=${broadcasterId}${i}`,
+      id: clipId,
+      url: `https://clips.twitch.tv/embed?clip=${clipId}&parent=${window.location.hostname}`,
+      embed_url: `https://clips.twitch.tv/embed?clip=${clipId}&parent=${window.location.hostname}`,
       broadcaster_id: streamer.id,
       broadcaster_name: streamer.name,
       creator_id: `creator${i}`,

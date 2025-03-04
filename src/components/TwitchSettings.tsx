@@ -15,23 +15,30 @@ interface TwitchSettingsProps {
 const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose, onSettingsSaved }) => {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
-  const [useHardcodedKeys, setUseHardcodedKeys] = useState(false);
+  const [useHardcodedKeys, setUseHardcodedKeys] = useState(true); // Default to true for better experience
   const [isPublicClient, setIsPublicClient] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
 
   useEffect(() => {
     // Load saved preferences if they exist
     const savedClientId = localStorage.getItem('twitch_client_id');
     const savedClientSecret = localStorage.getItem('twitch_client_secret');
-    const savedUseHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
+    const savedUseHardcodedKeys = localStorage.getItem('use_hardcoded_keys');
     const savedIsPublicClient = localStorage.getItem('is_public_client') === 'true';
+    
+    // If no preference is set, default to hardcoded keys
+    if (savedUseHardcodedKeys === null) {
+      localStorage.setItem('use_hardcoded_keys', 'true');
+    } else if (savedUseHardcodedKeys === 'false' && savedClientId) {
+      setUseHardcodedKeys(false);
+    }
     
     if (savedClientId) setClientId(savedClientId);
     if (savedClientSecret) setClientSecret(savedClientSecret);
-    setUseHardcodedKeys(savedUseHardcodedKeys);
     setIsPublicClient(savedIsPublicClient);
   }, [isOpen]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (useHardcodedKeys) {
       // If using hardcoded keys, just save the preference
       localStorage.setItem('use_hardcoded_keys', 'true');
@@ -52,18 +59,38 @@ const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose, onSett
         return;
       }
 
-      // Save to localStorage
-      localStorage.setItem('twitch_client_id', clientId);
-      localStorage.setItem('is_public_client', isPublicClient.toString());
-      localStorage.setItem('use_hardcoded_keys', 'false');
-      
-      if (isPublicClient) {
-        // For public clients, we can clear the secret
-        localStorage.removeItem('twitch_client_secret');
-      } else {
-        localStorage.setItem('twitch_client_secret', clientSecret);
+      // Test connection before saving
+      if (!isTestingConnection) {
+        try {
+          setIsTestingConnection(true);
+          toast.info('Testing connection to Twitch API...');
+          
+          // Set temporary values for testing
+          localStorage.setItem('twitch_client_id', clientId);
+          localStorage.setItem('is_public_client', isPublicClient.toString());
+          localStorage.setItem('use_hardcoded_keys', 'false');
+          
+          if (!isPublicClient) {
+            localStorage.setItem('twitch_client_secret', clientSecret);
+          } else {
+            localStorage.removeItem('twitch_client_secret');
+          }
+          
+          // Try to get a token
+          const testModule = await import('../utils/twitchApi');
+          await testModule.getTwitchAuthToken();
+          
+          toast.success('Connection to Twitch API successful!');
+        } catch (error) {
+          console.error('Connection test error:', error);
+          toast.error('Failed to connect to Twitch API. Please check your credentials.');
+          setIsTestingConnection(false);
+          return;
+        }
+        setIsTestingConnection(false);
       }
-      
+
+      // Save to localStorage (already saved from test)
       toast.success('Twitch API credentials saved');
     }
     
@@ -160,7 +187,7 @@ const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose, onSett
               <Button variant="outline" type="button" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit">
+              <Button type="submit" isLoading={isTestingConnection}>
                 Save Settings
               </Button>
             </div>

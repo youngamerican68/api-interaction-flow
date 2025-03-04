@@ -3,7 +3,7 @@ import { Container } from "@/components/ui-custom/Container";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui-custom/Card";
 import { Button } from "@/components/ui-custom/Button";
 import { AnimatedText } from "@/components/ui-custom/AnimatedText";
-import { Play, RefreshCw, Settings, TrendingUp, AlertCircle } from "lucide-react";
+import { Play, RefreshCw, Settings, TrendingUp, AlertCircle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import TwitchSettings from "@/components/TwitchSettings";
 import { detectViralMoments } from "@/utils/twitchApi";
@@ -270,15 +270,28 @@ const ViralDetector = () => {
                             alt={`${clip.streamerName} clip`}
                             className="w-full h-full object-cover rounded-t-lg"
                           />
-                          <Button 
-                            className="absolute inset-0 m-auto w-12 h-12 rounded-full"
-                            variant="secondary"
-                            icon={<Play size={20} />}
-                            onClick={() => window.open(clip.clipUrl, '_blank')}
-                          />
+                          <div className="absolute inset-0 m-auto w-full h-full flex items-center justify-center">
+                            <iframe
+                              src={clip.clipUrl}
+                              allowFullScreen
+                              width="100%"
+                              height="100%"
+                              className="absolute inset-0"
+                            ></iframe>
+                          </div>
                         </div>
                         <div className="p-4">
-                          <h3 className="font-semibold truncate">{clip.streamerName}</h3>
+                          <div className="flex justify-between items-center">
+                            <h3 className="font-semibold truncate">{clip.streamerName}</h3>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => window.open(clip.clipUrl, '_blank')}
+                              className="h-6 w-6"
+                            >
+                              <ExternalLink size={14} />
+                            </Button>
+                          </div>
                           <div className="flex justify-between text-sm text-muted-foreground mt-1">
                             <span>{formatTimestamp(clip.timestamp)}</span>
                           </div>

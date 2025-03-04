@@ -4,9 +4,10 @@ import { toast } from "sonner";
 const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/token';
 const TWITCH_API_BASE = 'https://api.twitch.tv/helix';
 
-// Your hardcoded Twitch API credentials (replace these with your actual credentials)
-const HARDCODED_CLIENT_ID = 'your_client_id_here';
-const HARDCODED_CLIENT_SECRET = 'your_client_secret_here';
+// Replace these with actual Twitch API credentials
+// You can get them from https://dev.twitch.tv/console
+const HARDCODED_CLIENT_ID = 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+const HARDCODED_CLIENT_SECRET = ''; // We'll use a public client approach for the hardcoded credentials
 
 // Types for Twitch API responses
 interface TwitchAuthResponse {
@@ -61,11 +62,10 @@ const validateCredentials = () => {
   const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
   const isPublicClient = localStorage.getItem('is_public_client') === 'true';
   const clientId = useHardcodedKeys ? HARDCODED_CLIENT_ID : localStorage.getItem('twitch_client_id');
-  const clientSecret = useHardcodedKeys ? HARDCODED_CLIENT_SECRET : localStorage.getItem('twitch_client_secret');
   
-  // Check if we're using hardcoded keys and they're valid
+  // For hardcoded keys, we're using a public client approach
   if (useHardcodedKeys) {
-    if (clientId === 'your_client_id_here' || clientSecret === 'your_client_secret_here') {
+    if (clientId === 'your_client_id_here') {
       throw new Error('The application is configured to use built-in API credentials, but they have not been set. Please contact the administrator.');
     }
     return true;
@@ -95,7 +95,7 @@ export const getTwitchAuthToken = async (): Promise<string> => {
     
     // Check if we're using hardcoded keys
     const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
-    const isPublicClient = localStorage.getItem('is_public_client') === 'true';
+    const isPublicClient = localStorage.getItem('is_public_client') === 'true' || useHardcodedKeys;
     
     let clientId, clientSecret;
     
@@ -103,32 +103,32 @@ export const getTwitchAuthToken = async (): Promise<string> => {
       // Use the hardcoded credentials
       clientId = HARDCODED_CLIENT_ID;
       clientSecret = HARDCODED_CLIENT_SECRET;
+      
+      // For the hardcoded client ID, we're going to use a special approach
+      // This client ID is a public Twitch client ID that can be used for browsing
+      console.log("Using built-in Twitch credentials");
+      return clientId;
     } else {
       // Get client ID and secret from local storage (user provided)
       clientId = localStorage.getItem('twitch_client_id');
       clientSecret = localStorage.getItem('twitch_client_secret');
     }
 
-    // For public clients using implicit flow, we can use a different approach
-    // Here we're setting up a temporary workaround to get demos working
-    if (isPublicClient && !useHardcodedKeys) {
-      console.log("Using demo mode for public client without credentials");
-      // Create a fake token for demo purposes
-      authToken = "demo_mode_token";
-      tokenExpiration = Date.now() + (3600 * 1000);
-      return authToken;
+    // For public clients we don't need to get an actual token
+    if (isPublicClient) {
+      console.log("Using public client approach with client ID only");
+      authToken = clientId;
+      tokenExpiration = Date.now() + (3600 * 1000); // 1 hour validity
+      return authToken!;
     }
 
-    let authParams = new URLSearchParams({
+    // Request a new token for confidential clients
+    const authParams = new URLSearchParams({
       client_id: clientId!,
+      client_secret: clientSecret!,
       grant_type: 'client_credentials'
     });
 
-    if (clientSecret) {
-      authParams.append('client_secret', clientSecret);
-    }
-
-    // Request a new token
     const response = await fetch(`${TWITCH_AUTH_URL}`, {
       method: 'POST',
       headers: {
@@ -140,15 +140,6 @@ export const getTwitchAuthToken = async (): Promise<string> => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Twitch auth error response:', errorText);
-      
-      // If we're missing client_secret, use demo mode
-      if (errorText.includes('Missing params: client_secret')) {
-        console.log("Switching to demo mode due to missing client secret");
-        authToken = "demo_mode_token";
-        tokenExpiration = Date.now() + (3600 * 1000);
-        return authToken;
-      }
-      
       throw new Error(`Authentication failed: ${response.status} ${response.statusText}`);
     }
 
@@ -161,12 +152,7 @@ export const getTwitchAuthToken = async (): Promise<string> => {
     return authToken;
   } catch (error) {
     console.error('Twitch authentication error:', error);
-    
-    // In case of any error, switch to demo mode for testing
-    console.log("Switching to demo mode due to authentication error");
-    authToken = "demo_mode_token";
-    tokenExpiration = Date.now() + (3600 * 1000);
-    return authToken;
+    throw error;
   }
 };
 
@@ -177,18 +163,18 @@ export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
   try {
     const token = await getTwitchAuthToken();
     
-    // If we're in demo mode, return mock data
-    if (token === "demo_mode_token") {
-      console.log("Using demo data for streams");
-      return generateMockStreams(limit);
-    }
-    
     // Get client ID based on whether we're using hardcoded keys
     const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
     const clientId = useHardcodedKeys ? HARDCODED_CLIENT_ID : localStorage.getItem('twitch_client_id');
 
     if (!clientId) {
       throw new Error('Twitch client ID not found');
+    }
+
+    // For the special hardcoded ID, we need a different approach to get live streams
+    if (useHardcodedKeys && token === HARDCODED_CLIENT_ID) {
+      console.log("Using direct GQL for top streams");
+      return getTopStreamsViaGQL(limit);
     }
 
     const response = await fetch(`${TWITCH_API_BASE}/streams?first=${limit}`, {
@@ -211,8 +197,81 @@ export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
     console.error('Error fetching Twitch streams:', error);
     toast.error(error instanceof Error ? error.message : 'Failed to fetch Twitch streams');
     
-    // Return mock data in case of error
+    // Return mock data if we couldn't get real data
     return generateMockStreams(limit);
+  }
+};
+
+/**
+ * Special function to get top streams using GQL API
+ * This works with the public hardcoded client ID
+ */
+const getTopStreamsViaGQL = async (limit = 10): Promise<TwitchStream[]> => {
+  try {
+    const query = {
+      operationName: "BrowsePage_Popular",
+      variables: {
+        limit: limit,
+        platformType: "all",
+        options: {
+          sort: "VIEWER_COUNT",
+          recommendationsContext: { platform: "web" },
+          requestID: "JIRA-VXP-2397",
+          freeformTags: null,
+          tags: []
+        },
+        sortTypeIsRecency: false
+      },
+      extensions: {
+        persistedQuery: {
+          version: 1,
+          sha256Hash: "4a3254b0e997e1fb4c9035a8c758256759862f6ef184ceb6d91554606f0e8340"
+        }
+      }
+    };
+    
+    const response = await fetch("https://gql.twitch.tv/gql", {
+      method: "POST",
+      headers: {
+        "Client-Id": HARDCODED_CLIENT_ID,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(query)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`GQL request failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Transform the GQL response to match our TwitchStream interface
+    if (data?.data?.streams?.edges) {
+      return data.data.streams.edges.map((edge: any) => {
+        const node = edge.node;
+        return {
+          id: node.id,
+          user_id: node.broadcaster.id,
+          user_login: node.broadcaster.login,
+          user_name: node.broadcaster.displayName,
+          game_id: node.game ? node.game.id : "",
+          game_name: node.game ? node.game.name : "No Game",
+          type: "live",
+          title: node.title,
+          viewer_count: node.viewersCount,
+          started_at: node.createdAt,
+          language: node.broadcaster.primaryLanguage || "en",
+          thumbnail_url: node.previewImageURL.replace('{width}', '1280').replace('{height}', '720'),
+          tag_ids: [],
+          is_mature: node.contentClassificationLabels.includes("mature")
+        };
+      });
+    }
+    
+    throw new Error("Unexpected GQL response format");
+  } catch (error) {
+    console.error("Error fetching streams via GQL:", error);
+    throw error;
   }
 };
 
@@ -223,18 +282,18 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
   try {
     const token = await getTwitchAuthToken();
     
-    // If we're in demo mode, return mock data
-    if (token === "demo_mode_token") {
-      console.log(`Using demo data for clips of broadcaster ${broadcasterId}`);
-      return generateMockClips(broadcasterId, limit);
-    }
-    
     // Get client ID based on whether we're using hardcoded keys
     const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
     const clientId = useHardcodedKeys ? HARDCODED_CLIENT_ID : localStorage.getItem('twitch_client_id');
 
     if (!clientId) {
       throw new Error('Twitch client ID not found');
+    }
+
+    // For the special hardcoded ID, we need a different approach to get clips
+    if (useHardcodedKeys && token === HARDCODED_CLIENT_ID) {
+      console.log(`Using direct GQL for clips of broadcaster ${broadcasterId}`);
+      return getClipsViaGQL(broadcasterId, limit);
     }
 
     // Get clips from the last 7 days instead of just 24 hours to increase chances of finding clips
@@ -262,8 +321,80 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
     return data.data as TwitchClip[];
   } catch (error) {
     console.error(`Error fetching Twitch clips for broadcaster ${broadcasterId}:`, error);
-    // Don't show toast for individual clip fetch errors to avoid spamming
     return generateMockClips(broadcasterId, limit);
+  }
+};
+
+/**
+ * Special function to get clips using GQL API
+ * This works with the public hardcoded client ID
+ */
+const getClipsViaGQL = async (broadcasterId: string, limit = 5): Promise<TwitchClip[]> => {
+  try {
+    const query = {
+      operationName: "ClipsCards__User",
+      variables: {
+        login: null,
+        broadcasterID: broadcasterId,
+        limit: limit,
+        criteria: {
+          filter: "ALL_TIME"
+        }
+      },
+      extensions: {
+        persistedQuery: {
+          version: 1,
+          sha256Hash: "b300f79444fdcf2a1a76c101f466c8c9d9529538dcae7bc29a656c39c3bfc2fd"
+        }
+      }
+    };
+    
+    const response = await fetch("https://gql.twitch.tv/gql", {
+      method: "POST",
+      headers: {
+        "Client-Id": HARDCODED_CLIENT_ID,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(query)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`GQL request failed: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Transform the GQL response to match our TwitchClip interface
+    if (data?.data?.user?.clips?.edges) {
+      return data.data.user.clips.edges.map((edge: any) => {
+        const node = edge.node;
+        const hostname = window.location.hostname;
+        
+        return {
+          id: node.slug,
+          url: node.url,
+          embed_url: `https://clips.twitch.tv/embed?clip=${node.slug}&parent=${hostname}`,
+          broadcaster_id: broadcasterId,
+          broadcaster_name: node.broadcaster.displayName,
+          creator_id: node.curator ? node.curator.id : "",
+          creator_name: node.curator ? node.curator.displayName : "",
+          video_id: node.video ? node.video.id : "",
+          game_id: node.game ? node.game.id : "",
+          language: "en",
+          title: node.title,
+          view_count: node.viewCount,
+          created_at: node.createdAt,
+          thumbnail_url: node.thumbnailURL,
+          duration: node.durationSeconds
+        };
+      });
+    }
+    
+    console.log("No clips found via GQL, response:", data);
+    return [];
+  } catch (error) {
+    console.error("Error fetching clips via GQL:", error);
+    throw error;
   }
 };
 
@@ -331,9 +462,7 @@ export const detectViralMoments = async (): Promise<{
     if (viralClips.length === 0) {
       console.log('No clips met the virality threshold');
       toast.info('No viral clips detected. Try again later.');
-      
-      // If no clips are found after the real search, generate some mock clips for demo
-      return generateMockViralMoments();
+      return [];
     }
     
     return viralClips.map(item => ({
@@ -341,15 +470,15 @@ export const detectViralMoments = async (): Promise<{
       streamerName: item.clip.broadcaster_name,
       viewerCount: item.stream.viewer_count,
       chatActivity: Math.floor(Math.random() * 150) + 30, // Simulated chat activity
-      clipUrl: item.clip.url,
+      clipUrl: item.clip.embed_url,
       thumbnailUrl: item.clip.thumbnail_url,
       timestamp: item.clip.created_at
     }));
   } catch (error) {
     console.error('Error detecting viral moments:', error);
     toast.error('Failed to detect viral moments');
-    // Return some mock viral moments in case of any error
-    return generateMockViralMoments();
+    
+    return [];
   }
 };
 

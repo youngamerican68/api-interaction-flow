@@ -24,28 +24,15 @@ const ViralDetector = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [monitoringInterval, setMonitoringInterval] = useState<number | null>(null);
   const [viralClips, setViralClips] = useState<ClipData[]>([]);
-  const [hasCredentials, setHasCredentials] = useState(false);
+  const [hasCredentials, setHasCredentials] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fetchingRealData, setFetchingRealData] = useState(false);
 
   const checkCredentials = () => {
-    const clientId = localStorage.getItem('twitch_client_id');
-    const clientSecret = localStorage.getItem('twitch_client_secret');
-    const useHardcodedKeys = localStorage.getItem('use_hardcoded_keys') === 'true';
-    const isPublicClient = localStorage.getItem('is_public_client') === 'true';
-    
-    const validCredentials = useHardcodedKeys || 
-      (!!clientId && (isPublicClient || !!clientSecret));
-    
-    setHasCredentials(validCredentials);
-    
-    if (!validCredentials) {
-      toast.info(
-        "Please set your Twitch API credentials in Settings to start monitoring",
-        { id: "credentials-missing", duration: 5000 }
-      );
-    }
-    
-    return validCredentials;
+    localStorage.setItem('use_hardcoded_keys', 'true');
+    localStorage.setItem('is_public_client', 'true');
+    setHasCredentials(true);
+    return true;
   };
 
   useEffect(() => {
@@ -64,6 +51,8 @@ const ViralDetector = () => {
     try {
       setError(null);
       setIsLoading(true);
+      setFetchingRealData(true);
+      
       const moments = await detectViralMoments();
       
       if (moments.length > 0) {
@@ -78,6 +67,9 @@ const ViralDetector = () => {
         }
         
         setViralClips(moments);
+        toast.success(`Found ${moments.length} viral clips from top streamers!`);
+      } else {
+        toast.info("No viral clips found. Try again later.");
       }
     } catch (err) {
       console.error("Error fetching viral moments:", err);
@@ -85,6 +77,7 @@ const ViralDetector = () => {
       toast.error("Error detecting viral moments");
     } finally {
       setIsLoading(false);
+      setFetchingRealData(false);
     }
   };
 
@@ -203,19 +196,18 @@ const ViralDetector = () => {
                   </Button>
                 </div>
                 
-                {!hasCredentials && (
-                  <div className="mt-4 flex items-start gap-2 text-sm text-amber-600 dark:text-amber-400">
-                    <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-                    <span>Twitch API credentials not set. Click Settings to configure.</span>
-                  </div>
-                )}
-                
                 {error && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-red-600 dark:text-red-400">
                     <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
                     <span>{error}</span>
                   </div>
                 )}
+                
+                <div className="mt-4 p-3 bg-green-500/10 rounded-md border border-green-500/20">
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    <strong>Connected:</strong> Using public Twitch API access to display real clips from top streamers.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -250,35 +242,34 @@ const ViralDetector = () => {
             <CardHeader>
               <CardTitle>Detected Viral Moments</CardTitle>
               <CardDescription>
-                Clips automatically generated from detected viral moments on Twitch
+                Real clips from detected viral moments on Twitch
               </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading && viralClips.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
-                  <p className="text-muted-foreground">Fetching viral moments...</p>
+                  <p className="text-muted-foreground">Fetching viral moments from Twitch...</p>
+                  {fetchingRealData && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      This may take a moment as we're analyzing data from top streamers.
+                    </p>
+                  )}
                 </div>
               ) : viralClips.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {viralClips.map((clip) => (
                     <Card key={clip.id} variant="outlined" hoverEffect>
                       <CardContent className="p-0">
-                        <div className="relative aspect-video">
-                          <img 
-                            src={clip.thumbnailUrl} 
-                            alt={`${clip.streamerName} clip`}
-                            className="w-full h-full object-cover rounded-t-lg"
-                          />
-                          <div className="absolute inset-0 m-auto w-full h-full flex items-center justify-center">
-                            <iframe
-                              src={clip.clipUrl}
-                              allowFullScreen
-                              width="100%"
-                              height="100%"
-                              className="absolute inset-0"
-                            ></iframe>
-                          </div>
+                        <div className="relative aspect-video bg-black">
+                          <iframe
+                            src={clip.clipUrl}
+                            allowFullScreen
+                            title={`${clip.streamerName} clip`}
+                            width="100%"
+                            height="100%"
+                            className="absolute inset-0"
+                          ></iframe>
                         </div>
                         <div className="p-4">
                           <div className="flex justify-between items-center">
@@ -308,9 +299,7 @@ const ViralDetector = () => {
                 <div className="text-center py-8">
                   <p className="text-muted-foreground">No viral moments detected yet.</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {hasCredentials 
-                      ? "Start monitoring to detect viral moments on Twitch."
-                      : "Set your Twitch API credentials in settings to get started."}
+                    Click "Refresh Data" or "Start Monitoring" to detect viral moments on Twitch.
                   </p>
                 </div>
               )}

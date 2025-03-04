@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { X, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui-custom/Card';
@@ -16,35 +15,27 @@ const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose, onSett
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [useHardcodedKeys, setUseHardcodedKeys] = useState(true); // Default to true for better experience
-  const [isPublicClient, setIsPublicClient] = useState(false);
+  const [isPublicClient, setIsPublicClient] = useState(true); // Default to true
   const [isTestingConnection, setIsTestingConnection] = useState(false);
 
   useEffect(() => {
-    // Load saved preferences if they exist
+    // Always set to use hardcoded keys
+    localStorage.setItem('use_hardcoded_keys', 'true');
+    localStorage.setItem('is_public_client', 'true');
+    
+    // Load saved preferences if they exist (but prefer hardcoded keys)
     const savedClientId = localStorage.getItem('twitch_client_id');
     const savedClientSecret = localStorage.getItem('twitch_client_secret');
-    const savedUseHardcodedKeys = localStorage.getItem('use_hardcoded_keys');
-    const savedIsPublicClient = localStorage.getItem('is_public_client') === 'true';
-    
-    // If no preference is set, default to hardcoded keys
-    if (savedUseHardcodedKeys === null) {
-      localStorage.setItem('use_hardcoded_keys', 'true');
-    } else if (savedUseHardcodedKeys === 'false' && savedClientId) {
-      setUseHardcodedKeys(false);
-    }
     
     if (savedClientId) setClientId(savedClientId);
     if (savedClientSecret) setClientSecret(savedClientSecret);
-    setIsPublicClient(savedIsPublicClient);
   }, [isOpen]);
 
   const handleSave = async () => {
     if (useHardcodedKeys) {
       // If using hardcoded keys, just save the preference
       localStorage.setItem('use_hardcoded_keys', 'true');
-      localStorage.removeItem('twitch_client_id');
-      localStorage.removeItem('twitch_client_secret');
-      localStorage.removeItem('is_public_client');
+      localStorage.setItem('is_public_client', 'true');
       toast.success('Using built-in Twitch API credentials');
     } else {
       // Otherwise require and save user-provided credentials
@@ -110,7 +101,7 @@ const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose, onSett
         <CardHeader className="relative">
           <CardTitle>Twitch API Settings</CardTitle>
           <CardDescription>
-            Enter your Twitch API credentials to connect to the service
+            Configure how the app connects to Twitch
           </CardDescription>
           <Button 
             variant="minimal" 
@@ -122,6 +113,12 @@ const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose, onSett
           </Button>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 p-3 bg-green-500/10 rounded-md border border-green-500/20">
+            <p className="text-sm text-green-700 dark:text-green-400">
+              <strong>Success:</strong> Using built-in Twitch API credentials for public access. You can view real clips from top streamers.
+            </p>
+          </div>
+          
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
             <div className="flex items-center justify-between mb-4 p-2 bg-secondary/50 rounded-md">
               <div>

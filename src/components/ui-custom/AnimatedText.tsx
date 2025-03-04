@@ -1,85 +1,77 @@
 
-import React, { useEffect, useRef } from "react";
-import { cn } from "@/lib/utils";
+import React, { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
+
+type AnimationStyle = 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight';
+type HTMLTag = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'div';
 
 interface AnimatedTextProps {
   text: string;
+  tag?: HTMLTag;
   className?: string;
-  animation?: "fade" | "slide" | "typewriter" | "none";
+  animation?: AnimationStyle;
   delay?: number;
   duration?: number;
-  tag?: keyof JSX.IntrinsicElements;
 }
 
-const AnimatedText: React.FC<AnimatedTextProps> = ({
-  text,
-  className,
-  animation = "fade",
-  delay = 0,
-  duration = 0.6,
-  tag: Tag = "div"
-}) => {
-  const elementRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!elementRef.current || animation === "none") return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setTimeout(() => {
-              if (elementRef.current) {
-                if (animation === "fade") {
-                  elementRef.current.classList.add("animate-fade-in");
-                } else if (animation === "slide") {
-                  elementRef.current.classList.add("animate-slide-up");
-                } else if (animation === "typewriter") {
-                  // Implement typewriter animation logic if needed
-                }
-              }
-            }, delay * 1000);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.1 }
-    );
-
-    observer.observe(elementRef.current);
-
-    return () => {
-      if (elementRef.current) {
-        observer.unobserve(elementRef.current);
-      }
-    };
-  }, [animation, delay]);
-
-  const getAnimationClasses = () => {
-    if (animation === "fade") {
-      return "opacity-0";
-    } else if (animation === "slide") {
-      return "opacity-0 translate-y-4";
-    } else if (animation === "typewriter") {
-      return ""; // Add typewriter specific classes if needed
-    } else {
-      return "";
-    }
-  };
-
-  return (
-    <Tag
-      ref={elementRef as React.RefObject<any>}
-      style={{ animationDuration: `${duration}s` }}
-      className={cn(
-        "will-change-transform text-balance",
-        animation !== "none" && getAnimationClasses(),
-        className
-      )}
-    >
-      {text}
-    </Tag>
-  );
+const animations = {
+  fade: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+  },
+  slideUp: {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+  },
+  slideDown: {
+    initial: { opacity: 0, y: -20 },
+    animate: { opacity: 1, y: 0 },
+  },
+  slideLeft: {
+    initial: { opacity: 0, x: 20 },
+    animate: { opacity: 1, x: 0 },
+  },
+  slideRight: {
+    initial: { opacity: 0, x: -20 },
+    animate: { opacity: 1, x: 0 },
+  },
 };
 
-export { AnimatedText };
+export const AnimatedText: React.FC<AnimatedTextProps> = ({
+  text,
+  tag = 'p',
+  className = '',
+  animation = 'fade',
+  delay = 0,
+  duration = 0.5,
+}) => {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    // Using a simplified component rendering during SSR/before mount
+    const Component = tag;
+    return <Component className={className}>{text}</Component>;
+  }
+
+  const selectedAnimation = animations[animation];
+  const transition = { duration, delay, ease: 'easeOut' };
+
+  // Define the component dynamically
+  const Component = motion[tag] || motion.div;
+
+  return (
+    <Component
+      initial={selectedAnimation.initial}
+      animate={selectedAnimation.animate}
+      transition={transition}
+      className={cn(className)}
+    >
+      {text}
+    </Component>
+  );
+};

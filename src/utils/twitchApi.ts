@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 
 // Twitch API endpoints
@@ -170,17 +171,19 @@ export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
 
 /**
  * Get clips for a specific broadcaster
- * The 'started_at' parameter ensures we get recent clips
+ * The 'started_at' parameter ensures we get only today's clips
  */
 export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): Promise<TwitchClip[]> => {
   try {
     const token = await getTwitchAuthToken();
     const clientId = getClientId();
     
-    // Get clips from the last 7 days
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 7);
-    const startDateString = startDate.toISOString();
+    // Get clips from today only
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    const startDateString = today.toISOString();
+    
+    console.log(`Fetching clips from ${startDateString} for broadcaster ${broadcasterId}`);
     
     const response = await fetch(`${TWITCH_API_BASE}/clips?broadcaster_id=${broadcasterId}&first=${limit}&started_at=${startDateString}`, {
       headers: {
@@ -205,13 +208,17 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
         };
       });
       
-      console.log(`Fetched ${clips.length} recent clips for broadcaster ${broadcasterId}`);
+      console.log(`Fetched ${clips.length} TODAY's clips for broadcaster ${broadcasterId}`);
       return clips;
     }
     
-    // If no recent clips found, try without date filter as fallback
-    console.log(`No recent clips found for broadcaster ${broadcasterId}, trying without date filter`);
-    const fallbackResponse = await fetch(`${TWITCH_API_BASE}/clips?broadcaster_id=${broadcasterId}&first=${limit}`, {
+    // If no clips found for today, we'll try the last 24 hours as a fallback
+    console.log(`No clips found for today for broadcaster ${broadcasterId}, trying last 24 hours`);
+    const last24Hours = new Date();
+    last24Hours.setHours(last24Hours.getHours() - 24);
+    const last24HoursString = last24Hours.toISOString();
+    
+    const fallbackResponse = await fetch(`${TWITCH_API_BASE}/clips?broadcaster_id=${broadcasterId}&first=${limit}&started_at=${last24HoursString}`, {
       headers: {
         'Client-ID': clientId,
         'Authorization': `Bearer ${token}`
@@ -224,7 +231,7 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
     
     const fallbackData = await fallbackResponse.json();
     
-    if (fallbackData?.data) {
+    if (fallbackData?.data && fallbackData.data.length > 0) {
       // Transform the clips to include the embedded URL
       const hostname = window.location.hostname;
       const clips = fallbackData.data.map((clip: any) => {
@@ -234,11 +241,11 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
         };
       });
       
-      console.log(`Fetched ${clips.length} clips (any date) for broadcaster ${broadcasterId}`);
+      console.log(`Fetched ${clips.length} clips from last 24 hours for broadcaster ${broadcasterId}`);
       return clips;
     }
     
-    console.log(`No clips found for broadcaster ${broadcasterId}`);
+    console.log(`No recent clips found for broadcaster ${broadcasterId}, no clips will be included`);
     return [];
   } catch (error) {
     console.error(`Error fetching clips for broadcaster ${broadcasterId}:`, error);
@@ -314,6 +321,13 @@ export const detectViralMoments = async (useMockData: boolean = false): Promise<
       const viralScore = (normalizedViewCount * viewerWeight) + 
                          (normalizedChatActivity * chatWeight);
       
+      // Format the timestamp to be more readable and indicate if it's from today
+      const clipDate = new Date(item.clip.created_at);
+      const today = new Date();
+      const isToday = clipDate.getDate() === today.getDate() && 
+                       clipDate.getMonth() === today.getMonth() && 
+                       clipDate.getFullYear() === today.getFullYear();
+                       
       return {
         id: item.clip.id,
         streamerName: item.clip.broadcaster_name,
@@ -322,14 +336,26 @@ export const detectViralMoments = async (useMockData: boolean = false): Promise<
         clipUrl: item.clip.embed_url,
         thumbnailUrl: item.clip.thumbnail_url,
         timestamp: item.clip.created_at,
-        viralScore: viralScore
+        viralScore: viralScore,
+        isToday: isToday
       };
     });
     
-    // Sort by viral score (combined metric of viewer count and chat activity)
+    // Sort by viral score AND prioritize today's clips
     const viralClips = scoredClips
-      .sort((a, b) => b.viralScore - a.viralScore) // Sort by viral score
-      .slice(0, 10); // Take top 10
+      .sort((a, b) => {
+        // First prioritize today's clips
+        if (a.isToday && !b.isToday) return -1;
+        if (!a.isToday && b.isToday) return 1;
+        // Then sort by viral score
+        return b.viralScore - a.viralScore;
+      })
+      .slice(0, 10) // Take top 10
+      .map(clip => {
+        // Remove the isToday property before returning
+        const { isToday, ...clipWithoutIsToday } = clip;
+        return clipWithoutIsToday;
+      });
     
     console.log(`Found ${viralClips.length} potential viral clips after filtering`);
     
@@ -492,7 +518,13 @@ const generateMockViralMoments = (): {
   
   return Array.from({ length: 10 }, (_, i) => {
     const streamer = streamers[i % streamers.length];
-    const timestamp = new Date(Date.now() - Math.floor(Math.random() * 6 * 60 * 60 * 1000)).toISOString();
+    // Make mock data show today's date
+    const today = new Date();
+    // Randomize the hours to make it look realistic
+    today.setHours(Math.floor(Math.random() * 24), 
+                   Math.floor(Math.random() * 60),
+                   Math.floor(Math.random() * 60));
+    const timestamp = today.toISOString();
     const clipId = `mock-viral-${i}`;
     const chatActivity = Math.floor(Math.random() * 150) + 50;
     

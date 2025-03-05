@@ -167,8 +167,22 @@ const ViralDetector = () => {
     }
   };
 
+  const toggleMockData = () => {
+    setForceUseMockData(!forceUseMockData);
+    toast.info(`${!forceUseMockData ? 'Using demo data' : 'Attempting to use real data'}`);
+    refreshData();
+  };
+
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.getDate() === today.getDate() && 
+                    date.getMonth() === today.getMonth() && 
+                    date.getFullYear() === today.getFullYear();
+    
+    if (isToday) {
+      return `Today, ${date.toLocaleTimeString()}`;
+    }
     return date.toLocaleString();
   };
 
@@ -180,6 +194,14 @@ const ViralDetector = () => {
 
   const formatViralScore = (score: number): string => {
     return `${(score * 100).toFixed(0)}%`;
+  };
+
+  const isClipFromToday = (timestamp: string): boolean => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    return date.getDate() === today.getDate() && 
+           date.getMonth() === today.getMonth() && 
+           date.getFullYear() === today.getFullYear();
   };
 
   return (
@@ -209,8 +231,8 @@ const ViralDetector = () => {
                 </CardTitle>
                 <CardDescription>
                   {isMonitoring 
-                    ? "Currently monitoring Twitch for top viral moments by viewer count and chat activity" 
-                    : "Start monitoring to detect top viral moments"}
+                    ? "Currently monitoring Twitch for today's top viral moments by viewer count and chat activity" 
+                    : "Start monitoring to detect today's top viral moments"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -357,6 +379,12 @@ const ViralDetector = () => {
                     <p className="font-medium">{viralClips.length}</p>
                   </div>
                   <div>
+                    <p className="text-sm text-muted-foreground">Today's Clips</p>
+                    <p className="font-medium">
+                      {viralClips.filter(clip => isClipFromToday(clip.timestamp)).length}
+                    </p>
+                  </div>
+                  <div>
                     <p className="text-sm text-muted-foreground">Last Detected</p>
                     <p className="font-medium">
                       {viralClips.length > 0 
@@ -382,7 +410,7 @@ const ViralDetector = () => {
               <CardDescription>
                 {usingMockData 
                   ? "Demo clips ranked by viewer count and chat activity" 
-                  : "Real clips ranked by viewer count (70%) and chat activity (30%)"}
+                  : "Real clips ranked by viewer count (70%) and chat activity (30%), prioritizing today's clips"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -413,6 +441,11 @@ const ViralDetector = () => {
                           <div className="absolute top-2 left-2 bg-black/70 text-white text-sm font-semibold rounded-full h-6 w-6 flex items-center justify-center">
                             {index + 1}
                           </div>
+                          {isClipFromToday(clip.timestamp) && (
+                            <div className="absolute top-2 right-2 bg-green-500 text-white text-xs font-semibold px-2 py-0.5 rounded">
+                              Today
+                            </div>
+                          )}
                         </div>
                         <div className="p-4">
                           <div className="flex justify-between items-center">

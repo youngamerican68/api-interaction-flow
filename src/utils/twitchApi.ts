@@ -57,6 +57,15 @@ let authToken: string | null = null;
 let tokenExpiration: number | null = null;
 
 /**
+ * Clear the stored auth token to force a refresh
+ */
+export const clearAuthToken = () => {
+  authToken = null;
+  tokenExpiration = null;
+  console.log("Auth token cleared, will fetch a new one on next API call");
+};
+
+/**
  * Get Twitch Client ID from localStorage or use default
  */
 const getClientId = (): string => {
@@ -162,13 +171,19 @@ export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
 
 /**
  * Get clips for a specific broadcaster
+ * The 'started_at' parameter ensures we get recent clips
  */
 export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): Promise<TwitchClip[]> => {
   try {
     const token = await getTwitchAuthToken();
     const clientId = getClientId();
     
-    const response = await fetch(`${TWITCH_API_BASE}/clips?broadcaster_id=${broadcasterId}&first=${limit}`, {
+    // Get clips from the last 7 days
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+    const startDateString = startDate.toISOString();
+    
+    const response = await fetch(`${TWITCH_API_BASE}/clips?broadcaster_id=${broadcasterId}&first=${limit}&started_at=${startDateString}`, {
       headers: {
         'Client-ID': clientId,
         'Authorization': `Bearer ${token}`
@@ -181,7 +196,7 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
     
     const data = await response.json();
     
-    if (data?.data) {
+    if (data?.data && data.data.length > 0) {
       // Transform the clips to include the embedded URL
       const hostname = window.location.hostname;
       const clips = data.data.map((clip: any) => {
@@ -191,7 +206,36 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
         };
       });
       
-      console.log(`Fetched ${clips.length} clips for broadcaster ${broadcasterId}`);
+      console.log(`Fetched ${clips.length} recent clips for broadcaster ${broadcasterId}`);
+      return clips;
+    }
+    
+    // If no recent clips found, try without date filter as fallback
+    console.log(`No recent clips found for broadcaster ${broadcasterId}, trying without date filter`);
+    const fallbackResponse = await fetch(`${TWITCH_API_BASE}/clips?broadcaster_id=${broadcasterId}&first=${limit}`, {
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!fallbackResponse.ok) {
+      throw new Error(`Twitch API fallback request failed: ${fallbackResponse.status}`);
+    }
+    
+    const fallbackData = await fallbackResponse.json();
+    
+    if (fallbackData?.data) {
+      // Transform the clips to include the embedded URL
+      const hostname = window.location.hostname;
+      const clips = fallbackData.data.map((clip: any) => {
+        return {
+          ...clip,
+          embed_url: `https://clips.twitch.tv/embed?clip=${clip.id}&parent=${hostname}`
+        };
+      });
+      
+      console.log(`Fetched ${clips.length} clips (any date) for broadcaster ${broadcasterId}`);
       return clips;
     }
     

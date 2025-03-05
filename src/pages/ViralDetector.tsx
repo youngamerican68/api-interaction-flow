@@ -7,7 +7,7 @@ import { AnimatedText } from "@/components/ui-custom/AnimatedText";
 import { Play, RefreshCw, Settings, TrendingUp, AlertCircle, ExternalLink, Info } from "lucide-react";
 import { toast } from "sonner";
 import TwitchSettings from "@/components/TwitchSettings";
-import { detectViralMoments } from "@/utils/twitchApi";
+import { detectViralMoments, clearAuthToken } from "@/utils/twitchApi";
 
 interface ClipData {
   id: string;
@@ -55,6 +55,9 @@ const ViralDetector = () => {
       setError(null);
       setIsLoading(true);
       setFetchingRealData(true);
+      
+      // Clear previous auth token to ensure we're using the latest credentials
+      clearAuthToken();
       
       let moments: ClipData[] = [];
       
@@ -156,14 +159,20 @@ const ViralDetector = () => {
   };
 
   const refreshData = () => {
+    // Force clear any cached auth token to ensure fresh data
+    clearAuthToken();
     fetchViralMoments();
   };
 
   const handleSettingsSaved = () => {
     const hasSecret = checkCredentials();
     if (hasSecret) {
+      // Force clear auth token to make sure we use new credentials
+      clearAuthToken();
       setForceUseMockData(false);
       toast.success("Twitch credentials saved! Using real Twitch data.");
+      // Fetch new data immediately with new credentials
+      fetchViralMoments();
     }
   };
 
@@ -281,7 +290,36 @@ const ViralDetector = () => {
                     </div>
                   )}
                   
-                  {usingMockData && (
+                  {usingMockData && hasCredentials && (
+                    <div className="p-3 bg-yellow-500/10 rounded-md border border-yellow-500/20">
+                      <div className="flex items-start gap-2">
+                        <Info size={16} className="mt-0.5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />
+                        <div>
+                          <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                            <strong>Still seeing old clips?</strong> Try refreshing the data or check your API credentials in Settings.
+                          </p>
+                          <div className="flex gap-2 mt-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={refreshData}
+                            >
+                              Refresh Data
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => setIsSettingsOpen(true)}
+                            >
+                              Check Settings
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {usingMockData && !hasCredentials && (
                     <div className="p-3 bg-yellow-500/10 rounded-md border border-yellow-500/20">
                       <div className="flex items-start gap-2">
                         <Info size={16} className="mt-0.5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />
@@ -289,11 +327,9 @@ const ViralDetector = () => {
                           <p className="text-sm text-yellow-600 dark:text-yellow-400">
                             <strong>Demo Mode:</strong> Currently showing demo clips because the Twitch API returned authentication errors.
                           </p>
-                          {!hasCredentials && (
-                            <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-                              To get real-time clips, add your Twitch API credentials in Settings.
-                            </p>
-                          )}
+                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                            To get real-time clips, add your Twitch API credentials in Settings.
+                          </p>
                           <div className="flex gap-2 mt-2">
                             <Button 
                               variant="outline" 

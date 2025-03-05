@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui-custom/Button';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
+import { clearAuthToken } from '../utils/twitchApi';
 
 interface TwitchSettingsProps {
   isOpen: boolean;
@@ -40,6 +41,9 @@ const TwitchSettings: React.FC<TwitchSettingsProps> = ({ isOpen, onClose, onSett
   }, [isOpen]);
 
   const handleSave = async () => {
+    // Clear existing auth token to force refresh with new credentials
+    clearAuthToken();
+    
     if (useHardcodedKeys) {
       // If using hardcoded keys, clear any user provided credentials
       localStorage.removeItem('twitch_client_id');

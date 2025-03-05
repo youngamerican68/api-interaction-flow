@@ -25,16 +25,17 @@ const ViralDetector = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [monitoringInterval, setMonitoringInterval] = useState<number | null>(null);
   const [viralClips, setViralClips] = useState<ClipData[]>([]);
-  const [hasCredentials, setHasCredentials] = useState(true);
+  const [hasCredentials, setHasCredentials] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchingRealData, setFetchingRealData] = useState(false);
   const [usingMockData, setUsingMockData] = useState(false);
+  const [forceUseMockData, setForceUseMockData] = useState(false);
 
   const checkCredentials = () => {
-    localStorage.setItem('use_hardcoded_keys', 'true');
-    localStorage.setItem('is_public_client', 'true');
-    setHasCredentials(true);
-    return true;
+    const clientSecret = localStorage.getItem('twitch_client_secret');
+    const hasSecret = !!clientSecret;
+    setHasCredentials(hasSecret);
+    return hasSecret;
   };
 
   useEffect(() => {
@@ -54,16 +55,39 @@ const ViralDetector = () => {
       setError(null);
       setIsLoading(true);
       setFetchingRealData(true);
-      setUsingMockData(false);
       
-      const moments = await detectViralMoments();
+      let moments: ClipData[] = [];
       
-      // Check if we're using mock data by looking at the ID format
-      // Mock IDs typically start with "mock-viral-" or "demo-"
-      const isMockData = moments.length > 0 && 
-        (moments[0].id.startsWith('mock') || moments[0].id.startsWith('demo'));
-      
-      setUsingMockData(isMockData);
+      if (forceUseMockData) {
+        // If user has explicitly selected to use mock data
+        moments = await detectViralMoments(true);
+        setUsingMockData(true);
+      } else {
+        try {
+          // Try to get real data first
+          moments = await detectViralMoments(false);
+          setUsingMockData(false);
+          
+          // Check if we're using mock data by looking at the ID format
+          // Mock IDs typically start with "mock-viral-" or "demo-"
+          const isMockData = moments.length > 0 && 
+            (moments[0].id.startsWith('mock') || moments[0].id.startsWith('demo'));
+          
+          setUsingMockData(isMockData);
+        } catch (err) {
+          console.error("Failed to get real data:", err);
+          
+          // Only fall back to mock data if user hasn't provided credentials
+          if (!hasCredentials) {
+            toast.info("Using demo clips - Twitch API authentication failed");
+            moments = await detectViralMoments(true);
+            setUsingMockData(true);
+          } else {
+            // If user has provided credentials, show the error
+            throw err;
+          }
+        }
+      }
       
       if (moments.length > 0) {
         if (isMonitoring && viralClips.length > 0) {
@@ -77,8 +101,9 @@ const ViralDetector = () => {
         }
         
         setViralClips(moments);
-        if (isMockData) {
-          toast.info("Using demo clips - Twitch API authentication failed");
+        
+        if (usingMockData) {
+          toast.info("Using demo clips - To get real clips, provide your Twitch API credentials in Settings");
         } else {
           toast.success(`Found ${moments.length} viral clips from top streamers!`);
         }
@@ -89,7 +114,14 @@ const ViralDetector = () => {
       console.error("Error fetching viral moments:", err);
       setError(err instanceof Error ? err.message : "Failed to fetch viral moments");
       toast.error("Error detecting viral moments");
-      setUsingMockData(true);
+      
+      if (!viralClips.length) {
+        // Only fall back to mock data if we don't have any clips
+        toast.info("Showing demo data due to error");
+        const mockData = await detectViralMoments(true);
+        setViralClips(mockData);
+        setUsingMockData(true);
+      }
     } finally {
       setIsLoading(false);
       setFetchingRealData(false);
@@ -97,11 +129,6 @@ const ViralDetector = () => {
   };
 
   const startMonitoring = () => {
-    if (!hasCredentials) {
-      setIsSettingsOpen(true);
-      return;
-    }
-    
     setIsLoading(true);
     
     fetchViralMoments().then(() => {
@@ -110,6 +137,8 @@ const ViralDetector = () => {
       setIsMonitoring(true);
       setIsLoading(false);
       toast.success("Monitoring started. Checking for viral clips every 2 minutes.");
+    }).catch(() => {
+      setIsLoading(false);
     });
   };
 
@@ -127,21 +156,33 @@ const ViralDetector = () => {
   };
 
   const refreshData = () => {
-    if (!hasCredentials) {
-      setIsSettingsOpen(true);
-      return;
-    }
-    
     fetchViralMoments();
   };
 
   const handleSettingsSaved = () => {
-    checkCredentials();
+    const hasSecret = checkCredentials();
+    if (hasSecret) {
+      setForceUseMockData(false);
+      toast.success("Twitch credentials saved! Using real Twitch data.");
+    }
   };
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleString();
+  };
+
+  // Toggle between real and mock data
+  const toggleMockData = () => {
+    setForceUseMockData(!forceUseMockData);
+    toast.info(forceUseMockData 
+      ? "Switching to real Twitch data if available" 
+      : "Switching to demo data mode");
+    
+    // Refresh the data to apply the change
+    setTimeout(() => {
+      fetchViralMoments();
+    }, 500);
   };
 
   return (
@@ -218,22 +259,62 @@ const ViralDetector = () => {
                   </div>
                 )}
                 
-                <div className="mt-4 p-3 bg-green-500/10 rounded-md border border-green-500/20">
-                  <p className="text-sm text-green-700 dark:text-green-400">
-                    <strong>Connected:</strong> Using public Twitch API access to display clips from top streamers.
-                  </p>
-                </div>
-                
-                {usingMockData && (
-                  <div className="mt-2 p-3 bg-yellow-500/10 rounded-md border border-yellow-500/20">
-                    <div className="flex items-start gap-2">
-                      <Info size={16} className="mt-0.5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />
-                      <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                        <strong>Demo Mode:</strong> Currently showing demo clips because the Twitch API returned authentication errors. This is normal behavior when using the built-in credentials.
-                      </p>
+                <div className="grid gap-4 mt-4">
+                  {!hasCredentials && (
+                    <div className="p-3 bg-yellow-500/10 rounded-md border border-yellow-500/20">
+                      <div className="flex items-start gap-2">
+                        <Info size={16} className="mt-0.5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />
+                        <div>
+                          <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                            <strong>No API credentials:</strong> To get real-time Twitch clips, you need to add your Twitch API credentials.
+                          </p>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-2"
+                            onClick={() => setIsSettingsOpen(true)}
+                          >
+                            Add Twitch Credentials
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                  
+                  {usingMockData && (
+                    <div className="p-3 bg-yellow-500/10 rounded-md border border-yellow-500/20">
+                      <div className="flex items-start gap-2">
+                        <Info size={16} className="mt-0.5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />
+                        <div>
+                          <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                            <strong>Demo Mode:</strong> Currently showing demo clips because the Twitch API returned authentication errors.
+                          </p>
+                          {!hasCredentials && (
+                            <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                              To get real-time clips, add your Twitch API credentials in Settings.
+                            </p>
+                          )}
+                          <div className="flex gap-2 mt-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={toggleMockData}
+                            >
+                              {forceUseMockData ? "Try Real Data" : "Use Demo Data"}
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => setIsSettingsOpen(true)}
+                            >
+                              Settings
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
 

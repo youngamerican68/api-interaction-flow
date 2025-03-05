@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 // Twitch API endpoints
@@ -250,6 +249,7 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
 /**
  * Detect potential viral clips
  * This function analyzes streams and clips to find potential viral moments
+ * based on viewer count and chat activity
  */
 export const detectViralMoments = async (useMockData: boolean = false): Promise<{
   id: string;
@@ -259,6 +259,7 @@ export const detectViralMoments = async (useMockData: boolean = false): Promise<
   clipUrl: string;
   thumbnailUrl: string;
   timestamp: string;
+  viralScore: number;
 }[]> => {
   // If mock data is explicitly requested, return it immediately
   if (useMockData) {
@@ -294,23 +295,45 @@ export const detectViralMoments = async (useMockData: boolean = false): Promise<
       throw new Error('No clips found from Twitch API');
     }
     
-    // Score and filter real clips based on "virality" algorithm
-    // Sort by view count as a simple virality metric
-    const viralClips = allClips
-      .sort((a, b) => b.clip.view_count - a.clip.view_count) // Sort by view count
+    // Calculate a "viral score" for each clip
+    // This combines view count and chat activity into a single metric
+    const scoredClips = allClips.map(item => {
+      const chatActivity = Math.floor(Math.random() * 150) + 30; // Simulated chat activity
+      
+      // Calculate viral score: weighted combination of viewer count and chat activity
+      // Normalize both factors to be on similar scales
+      const viewerWeight = 0.7; // 70% weight to viewer count
+      const chatWeight = 0.3;   // 30% weight to chat activity
+      
+      // Normalize viewer count (divide by max possible to get 0-1 range)
+      const normalizedViewCount = item.stream.viewer_count / 100000;
+      // Chat activity is already in a reasonable range
+      const normalizedChatActivity = chatActivity / 200;
+      
+      // Combined score
+      const viralScore = (normalizedViewCount * viewerWeight) + 
+                         (normalizedChatActivity * chatWeight);
+      
+      return {
+        id: item.clip.id,
+        streamerName: item.clip.broadcaster_name,
+        viewerCount: item.stream.viewer_count,
+        chatActivity: chatActivity,
+        clipUrl: item.clip.embed_url,
+        thumbnailUrl: item.clip.thumbnail_url,
+        timestamp: item.clip.created_at,
+        viralScore: viralScore
+      };
+    });
+    
+    // Sort by viral score (combined metric of viewer count and chat activity)
+    const viralClips = scoredClips
+      .sort((a, b) => b.viralScore - a.viralScore) // Sort by viral score
       .slice(0, 10); // Take top 10
     
     console.log(`Found ${viralClips.length} potential viral clips after filtering`);
     
-    return viralClips.map(item => ({
-      id: item.clip.id,
-      streamerName: item.clip.broadcaster_name,
-      viewerCount: item.stream.viewer_count,
-      chatActivity: Math.floor(Math.random() * 150) + 30, // Simulated chat activity
-      clipUrl: item.clip.embed_url,
-      thumbnailUrl: item.clip.thumbnail_url,
-      timestamp: item.clip.created_at
-    }));
+    return viralClips;
   } catch (error) {
     console.error('Error detecting viral moments:', error);
     // Do not automatically fall back to mock data
@@ -453,6 +476,7 @@ const generateMockViralMoments = (): {
   clipUrl: string;
   thumbnailUrl: string;
   timestamp: string;
+  viralScore: number;
 }[] => {
   const streamers = [
     { name: 'Ninja', viewers: 45000 },
@@ -470,15 +494,25 @@ const generateMockViralMoments = (): {
     const streamer = streamers[i % streamers.length];
     const timestamp = new Date(Date.now() - Math.floor(Math.random() * 6 * 60 * 60 * 1000)).toISOString();
     const clipId = `mock-viral-${i}`;
+    const chatActivity = Math.floor(Math.random() * 150) + 50;
+    
+    // Calculate viral score for mock data too
+    const viewerWeight = 0.7;
+    const chatWeight = 0.3;
+    const normalizedViewCount = streamer.viewers / 100000;
+    const normalizedChatActivity = chatActivity / 200;
+    const viralScore = (normalizedViewCount * viewerWeight) + 
+                       (normalizedChatActivity * chatWeight);
     
     return {
       id: clipId,
       streamerName: streamer.name,
       viewerCount: streamer.viewers,
-      chatActivity: Math.floor(Math.random() * 150) + 50,
+      chatActivity: chatActivity,
       clipUrl: `https://clips.twitch.tv/embed?clip=${clipId}&parent=${hostname}`,
       thumbnailUrl: `https://picsum.photos/seed/viral${i}/640/360`,
-      timestamp: timestamp
+      timestamp: timestamp,
+      viralScore: viralScore
     };
   });
 };

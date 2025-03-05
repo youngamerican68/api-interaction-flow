@@ -1,10 +1,9 @@
-
 import { useState, useEffect } from "react";
 import { Container } from "@/components/ui-custom/Container";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui-custom/Card";
 import { Button } from "@/components/ui-custom/Button";
 import { AnimatedText } from "@/components/ui-custom/AnimatedText";
-import { Play, RefreshCw, Settings, TrendingUp, AlertCircle, ExternalLink, Info } from "lucide-react";
+import { Play, RefreshCw, Settings, TrendingUp, AlertCircle, ExternalLink, Info, BarChart2 } from "lucide-react";
 import { toast } from "sonner";
 import TwitchSettings from "@/components/TwitchSettings";
 import { detectViralMoments, clearAuthToken } from "@/utils/twitchApi";
@@ -17,6 +16,7 @@ interface ClipData {
   clipUrl: string;
   thumbnailUrl: string;
   timestamp: string;
+  viralScore: number;
 }
 
 const ViralDetector = () => {
@@ -56,23 +56,18 @@ const ViralDetector = () => {
       setIsLoading(true);
       setFetchingRealData(true);
       
-      // Clear previous auth token to ensure we're using the latest credentials
       clearAuthToken();
       
       let moments: ClipData[] = [];
       
       if (forceUseMockData) {
-        // If user has explicitly selected to use mock data
         moments = await detectViralMoments(true);
         setUsingMockData(true);
       } else {
         try {
-          // Try to get real data first
           moments = await detectViralMoments(false);
           setUsingMockData(false);
           
-          // Check if we're using mock data by looking at the ID format
-          // Mock IDs typically start with "mock-viral-" or "demo-"
           const isMockData = moments.length > 0 && 
             (moments[0].id.startsWith('mock') || moments[0].id.startsWith('demo'));
           
@@ -80,13 +75,11 @@ const ViralDetector = () => {
         } catch (err) {
           console.error("Failed to get real data:", err);
           
-          // Only fall back to mock data if user hasn't provided credentials
           if (!hasCredentials) {
             toast.info("Using demo clips - Twitch API authentication failed");
             moments = await detectViralMoments(true);
             setUsingMockData(true);
           } else {
-            // If user has provided credentials, show the error
             throw err;
           }
         }
@@ -99,16 +92,18 @@ const ViralDetector = () => {
           );
           
           if (newClips.length > 0) {
-            toast.success(`Detected ${newClips.length} new clips!`);
+            toast.success(`Detected ${newClips.length} new viral clips!`);
           }
         }
+        
+        moments.sort((a, b) => b.viralScore - a.viralScore);
         
         setViralClips(moments);
         
         if (usingMockData) {
           toast.info("Using demo clips - To get real clips, provide your Twitch API credentials in Settings");
         } else {
-          toast.success(`Found ${moments.length} viral clips from top streamers!`);
+          toast.success(`Found ${moments.length} viral clips ranked by viewer count and chat activity!`);
         }
       } else {
         toast.info("No viral clips found. Try again later.");
@@ -119,7 +114,6 @@ const ViralDetector = () => {
       toast.error("Error detecting viral moments");
       
       if (!viralClips.length) {
-        // Only fall back to mock data if we don't have any clips
         toast.info("Showing demo data due to error");
         const mockData = await detectViralMoments(true);
         setViralClips(mockData);
@@ -159,7 +153,6 @@ const ViralDetector = () => {
   };
 
   const refreshData = () => {
-    // Force clear any cached auth token to ensure fresh data
     clearAuthToken();
     fetchViralMoments();
   };
@@ -167,11 +160,9 @@ const ViralDetector = () => {
   const handleSettingsSaved = () => {
     const hasSecret = checkCredentials();
     if (hasSecret) {
-      // Force clear auth token to make sure we use new credentials
       clearAuthToken();
       setForceUseMockData(false);
       toast.success("Twitch credentials saved! Using real Twitch data.");
-      // Fetch new data immediately with new credentials
       fetchViralMoments();
     }
   };
@@ -181,17 +172,14 @@ const ViralDetector = () => {
     return date.toLocaleString();
   };
 
-  // Toggle between real and mock data
-  const toggleMockData = () => {
-    setForceUseMockData(!forceUseMockData);
-    toast.info(forceUseMockData 
-      ? "Switching to real Twitch data if available" 
-      : "Switching to demo data mode");
-    
-    // Refresh the data to apply the change
-    setTimeout(() => {
-      fetchViralMoments();
-    }, 500);
+  const getViralScoreColor = (score: number): string => {
+    if (score >= 0.5) return "text-green-500";
+    if (score >= 0.3) return "text-yellow-500";
+    return "text-blue-500";
+  };
+
+  const formatViralScore = (score: number): string => {
+    return `${(score * 100).toFixed(0)}%`;
   };
 
   return (
@@ -205,7 +193,7 @@ const ViralDetector = () => {
             animation="fade"
           />
           <AnimatedText
-            text="Monitor Twitch streams to detect and capture viral moments automatically"
+            text="Monitor Twitch streams to detect and capture viral moments based on viewer count and chat activity"
             tag="p"
             className="text-xl text-muted-foreground max-w-2xl mx-auto text-center mb-8"
             animation="fade"
@@ -221,8 +209,8 @@ const ViralDetector = () => {
                 </CardTitle>
                 <CardDescription>
                   {isMonitoring 
-                    ? "Currently monitoring Twitch for viral moments" 
-                    : "Start monitoring to detect viral moments"}
+                    ? "Currently monitoring Twitch for top viral moments by viewer count and chat activity" 
+                    : "Start monitoring to detect top viral moments"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -387,11 +375,14 @@ const ViralDetector = () => {
 
           <Card variant="default">
             <CardHeader>
-              <CardTitle>Detected Viral Moments</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart2 className="w-5 h-5" />
+                Top 10 Viral Moments
+              </CardTitle>
               <CardDescription>
                 {usingMockData 
-                  ? "Demo clips for showcasing feature functionality" 
-                  : "Real clips from detected viral moments on Twitch"}
+                  ? "Demo clips ranked by viewer count and chat activity" 
+                  : "Real clips ranked by viewer count (70%) and chat activity (30%)"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -407,7 +398,7 @@ const ViralDetector = () => {
                 </div>
               ) : viralClips.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {viralClips.map((clip) => (
+                  {viralClips.map((clip, index) => (
                     <Card key={clip.id} variant="outlined" hoverEffect>
                       <CardContent className="p-0">
                         <div className="relative aspect-video bg-black">
@@ -419,6 +410,9 @@ const ViralDetector = () => {
                             height="100%"
                             className="absolute inset-0"
                           ></iframe>
+                          <div className="absolute top-2 left-2 bg-black/70 text-white text-sm font-semibold rounded-full h-6 w-6 flex items-center justify-center">
+                            {index + 1}
+                          </div>
                         </div>
                         <div className="p-4">
                           <div className="flex justify-between items-center">
@@ -439,6 +433,12 @@ const ViralDetector = () => {
                           <div className="flex justify-between text-sm mt-2">
                             <span>👁️ {clip.viewerCount.toLocaleString()}</span>
                             <span>💬 {clip.chatActivity}/s</span>
+                          </div>
+                          <div className="mt-2 flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Viral Score:</span>
+                            <span className={`text-sm font-semibold ${getViralScoreColor(clip.viralScore)}`}>
+                              {formatViralScore(clip.viralScore)}
+                            </span>
                           </div>
                         </div>
                       </CardContent>

@@ -3,10 +3,11 @@ import { Container } from "@/components/ui-custom/Container";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui-custom/Card";
 import { Button } from "@/components/ui-custom/Button";
 import { AnimatedText } from "@/components/ui-custom/AnimatedText";
-import { Play, RefreshCw, Settings, TrendingUp, AlertCircle, ExternalLink, Info, BarChart2 } from "lucide-react";
+import { Play, RefreshCw, Settings, TrendingUp, AlertCircle, ExternalLink, Info, BarChart2, Music } from "lucide-react";
 import { toast } from "sonner";
 import TwitchSettings from "@/components/TwitchSettings";
-import { detectViralMoments, clearAuthToken } from "@/utils/twitchApi";
+import { detectViralMoments, clearAuthToken, POPULAR_CATEGORIES } from "@/utils/twitchApi";
+import { Select, SelectItem, SelectValue, SelectTrigger, SelectContent } from "@/components/ui/select";
 
 interface ClipData {
   id: string;
@@ -17,6 +18,8 @@ interface ClipData {
   thumbnailUrl: string;
   timestamp: string;
   viralScore: number;
+  gameId?: string;
+  gameName?: string;
 }
 
 const ViralDetector = () => {
@@ -30,6 +33,7 @@ const ViralDetector = () => {
   const [fetchingRealData, setFetchingRealData] = useState(false);
   const [usingMockData, setUsingMockData] = useState(false);
   const [forceUseMockData, setForceUseMockData] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const checkCredentials = () => {
     const clientSecret = localStorage.getItem('twitch_client_secret');
@@ -61,11 +65,11 @@ const ViralDetector = () => {
       let moments: ClipData[] = [];
       
       if (forceUseMockData) {
-        moments = await detectViralMoments(true);
+        moments = await detectViralMoments({ useMockData: true, categoryId: selectedCategory });
         setUsingMockData(true);
       } else {
         try {
-          moments = await detectViralMoments(false);
+          moments = await detectViralMoments({ useMockData: false, categoryId: selectedCategory });
           setUsingMockData(false);
           
           const isMockData = moments.length > 0 && 
@@ -77,7 +81,7 @@ const ViralDetector = () => {
           
           if (!hasCredentials) {
             toast.info("Using demo clips - Twitch API authentication failed");
-            moments = await detectViralMoments(true);
+            moments = await detectViralMoments({ useMockData: true, categoryId: selectedCategory });
             setUsingMockData(true);
           } else {
             throw err;
@@ -100,13 +104,16 @@ const ViralDetector = () => {
         
         setViralClips(moments);
         
+        const categoryName = POPULAR_CATEGORIES.find(cat => cat.id === selectedCategory)?.name || 'All Categories';
+        
         if (usingMockData) {
-          toast.info("Using demo clips - To get real clips, provide your Twitch API credentials in Settings");
+          toast.info(`Using demo clips for ${categoryName} - To get real clips, provide your Twitch API credentials in Settings`);
         } else {
-          toast.success(`Found ${moments.length} viral clips ranked by viewer count and chat activity!`);
+          toast.success(`Found ${moments.length} viral clips from ${categoryName} ranked by viewer count and chat activity!`);
         }
       } else {
-        toast.info("No viral clips found. Try again later.");
+        const categoryName = POPULAR_CATEGORIES.find(cat => cat.id === selectedCategory)?.name || 'All Categories';
+        toast.info(`No viral clips found for ${categoryName}. Try again later or select a different category.`);
       }
     } catch (err) {
       console.error("Error fetching viral moments:", err);
@@ -115,7 +122,7 @@ const ViralDetector = () => {
       
       if (!viralClips.length) {
         toast.info("Showing demo data due to error");
-        const mockData = await detectViralMoments(true);
+        const mockData = await detectViralMoments({ useMockData: true, categoryId: selectedCategory });
         setViralClips(mockData);
         setUsingMockData(true);
       }
@@ -171,6 +178,17 @@ const ViralDetector = () => {
     setForceUseMockData(!forceUseMockData);
     toast.info(`${!forceUseMockData ? 'Using demo data' : 'Attempting to use real data'}`);
     refreshData();
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setSelectedCategory(value);
+    
+    const categoryName = POPULAR_CATEGORIES.find(cat => cat.id === value)?.name || 'All Categories';
+    toast.info(`Category changed to ${categoryName}`);
+    
+    if (!isMonitoring) {
+      refreshData();
+    }
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -269,6 +287,32 @@ const ViralDetector = () => {
                   >
                     Settings
                   </Button>
+                  
+                  <div className="flex items-center space-x-2 ml-auto">
+                    <label htmlFor="category-select" className="text-sm font-medium">
+                      Category:
+                    </label>
+                    <Select 
+                      value={selectedCategory} 
+                      onValueChange={handleCategoryChange}
+                    >
+                      <SelectTrigger id="category-select" className="w-[180px]">
+                        <SelectValue placeholder="Select a category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {POPULAR_CATEGORIES.map(category => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.id === '26936' ? (
+                              <span className="flex items-center">
+                                <Music className="w-4 h-4 mr-2" />
+                                {category.name}
+                              </span>
+                            ) : category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 
                 {error && (
@@ -396,6 +440,12 @@ const ViralDetector = () => {
                     <p className="text-sm text-muted-foreground">Data Source</p>
                     <p className="font-medium">{usingMockData ? "Demo Data" : "Live Twitch"}</p>
                   </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Selected Category</p>
+                    <p className="font-medium">
+                      {POPULAR_CATEGORIES.find(cat => cat.id === selectedCategory)?.name || 'All Categories'}
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -406,6 +456,11 @@ const ViralDetector = () => {
               <CardTitle className="flex items-center gap-2">
                 <BarChart2 className="w-5 h-5" />
                 Top 10 Viral Moments
+                {selectedCategory !== 'all' && (
+                  <span className="ml-2 text-sm font-normal px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                    {POPULAR_CATEGORIES.find(cat => cat.id === selectedCategory)?.name}
+                  </span>
+                )}
               </CardTitle>
               <CardDescription>
                 {usingMockData 
@@ -461,7 +516,11 @@ const ViralDetector = () => {
                           </div>
                           <div className="flex justify-between text-sm text-muted-foreground mt-1">
                             <span>{formatTimestamp(clip.timestamp)}</span>
-                            {usingMockData && <span className="text-xs italic">Demo</span>}
+                            {clip.gameName && (
+                              <span className="font-medium text-xs bg-secondary/50 px-1.5 py-0.5 rounded">
+                                {clip.gameName}
+                              </span>
+                            )}
                           </div>
                           <div className="flex justify-between text-sm mt-2">
                             <span>👁️ {clip.viewerCount.toLocaleString()}</span>

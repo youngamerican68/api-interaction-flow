@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 
 // Twitch API endpoints
@@ -9,6 +8,22 @@ const TWITCH_GQL_ENDPOINT = 'https://gql.twitch.tv/gql';
 // Client credentials - these should be set by the user in the settings
 // These are just fallbacks
 const DEFAULT_CLIENT_ID = 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+
+// Popular Twitch categories with their IDs
+export const POPULAR_CATEGORIES = [
+  { id: 'all', name: 'All Categories' },
+  { id: '26936', name: 'Music' },
+  { id: '509658', name: 'Just Chatting' },
+  { id: '33214', name: 'Fortnite' },
+  { id: '21779', name: 'League of Legends' },
+  { id: '516575', name: 'VALORANT' },
+  { id: '27471', name: 'Minecraft' },
+  { id: '512710', name: 'Call of Duty: Warzone' },
+  { id: '511224', name: 'Apex Legends' },
+  { id: '18122', name: 'World of Warcraft' },
+  { id: '518203', name: 'Sports' },
+  { id: '116747788', name: 'Pools, Hot Tubs, & Beaches' }
+];
 
 // Types for Twitch API responses
 interface TwitchAuthResponse {
@@ -63,14 +78,6 @@ export const clearAuthToken = () => {
   authToken = null;
   tokenExpiration = null;
   console.log("Auth token cleared, will fetch a new one on next API call");
-};
-
-/**
- * Get Twitch Client ID from localStorage or use default
- */
-const getClientId = (): string => {
-  const clientId = localStorage.getItem('twitch_client_id');
-  return clientId || DEFAULT_CLIENT_ID;
 };
 
 /**
@@ -129,14 +136,28 @@ export const getTwitchAuthToken = async (): Promise<string> => {
 };
 
 /**
- * Gets top live streams from Twitch
+ * Get Twitch Client ID from localStorage or use default
  */
-export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
+const getClientId = (): string => {
+  const clientId = localStorage.getItem('twitch_client_id');
+  return clientId || DEFAULT_CLIENT_ID;
+};
+
+/**
+ * Gets top live streams from Twitch, optionally filtered by category
+ */
+export const getTopStreams = async (limit = 10, categoryId?: string): Promise<TwitchStream[]> => {
   try {
     const token = await getTwitchAuthToken();
     const clientId = getClientId();
     
-    const response = await fetch(`${TWITCH_API_BASE}/streams?first=${limit}`, {
+    // Build the URL with optional game_id filter
+    let url = `${TWITCH_API_BASE}/streams?first=${limit}`;
+    if (categoryId && categoryId !== 'all') {
+      url += `&game_id=${categoryId}`;
+    }
+    
+    const response = await fetch(url, {
       headers: {
         'Client-ID': clientId,
         'Authorization': `Bearer ${token}`
@@ -151,7 +172,7 @@ export const getTopStreams = async (limit = 10): Promise<TwitchStream[]> => {
     const data = await response.json();
     
     if (data?.data) {
-      console.log(`Fetched ${data.data.length} top streams via REST API`);
+      console.log(`Fetched ${data.data.length} top streams via REST API ${categoryId ? `for category ${categoryId}` : ''}`);
       return data.data;
     }
     
@@ -258,7 +279,10 @@ export const getClipsForBroadcaster = async (broadcasterId: string, limit = 5): 
  * This function analyzes streams and clips to find potential viral moments
  * based on viewer count and chat activity
  */
-export const detectViralMoments = async (useMockData: boolean = false): Promise<{
+export const detectViralMoments = async (options: {
+  useMockData?: boolean;
+  categoryId?: string;
+} = {}): Promise<{
   id: string;
   streamerName: string;
   viewerCount: number;
@@ -267,18 +291,22 @@ export const detectViralMoments = async (useMockData: boolean = false): Promise<
   thumbnailUrl: string;
   timestamp: string;
   viralScore: number;
+  gameId?: string;
+  gameName?: string;
 }[]> => {
+  const { useMockData = false, categoryId } = options;
+  
   // If mock data is explicitly requested, return it immediately
   if (useMockData) {
     console.log('Mock data explicitly requested');
-    return generateMockViralMoments();
+    return generateMockViralMoments(categoryId);
   }
   
   try {
-    console.log('Starting viral moment detection with real Twitch data...');
+    console.log(`Starting viral moment detection with real Twitch data for category: ${categoryId || 'all'}`);
     
     // Get top streams
-    const topStreams = await getTopStreams(20);
+    const topStreams = await getTopStreams(20, categoryId);
     console.log(`Processing ${topStreams.length} streams for viral clips`);
     
     // For each stream, get recent clips
@@ -337,7 +365,9 @@ export const detectViralMoments = async (useMockData: boolean = false): Promise<
         thumbnailUrl: item.clip.thumbnail_url,
         timestamp: item.clip.created_at,
         viralScore: viralScore,
-        isToday: isToday
+        isToday: isToday,
+        gameId: item.stream.game_id,
+        gameName: item.stream.game_name
       };
     });
     
@@ -374,8 +404,9 @@ export const detectViralMoments = async (useMockData: boolean = false): Promise<
 /**
  * Generate mock streams for demo purposes
  */
-const generateMockStreams = (limit: number): TwitchStream[] => {
+const generateMockStreams = (limit: number, categoryId?: string): TwitchStream[] => {
   const games = [
+    { id: '26936', name: 'Music' },
     { id: '509658', name: 'Just Chatting' },
     { id: '33214', name: 'Fortnite' },
     { id: '21779', name: 'League of Legends' },
@@ -384,6 +415,14 @@ const generateMockStreams = (limit: number): TwitchStream[] => {
     { id: '512710', name: 'Call of Duty: Warzone' },
     { id: '511224', name: 'Apex Legends' }
   ];
+  
+  // If a category ID is provided, filter the games
+  const filteredGames = categoryId && categoryId !== 'all' 
+    ? games.filter(game => game.id === categoryId)
+    : games;
+  
+  // If filtering results in empty array, use the first game (shouldn't happen with valid IDs)
+  const gamesToUse = filteredGames.length > 0 ? filteredGames : [games[0]];
   
   const streamers = [
     { id: '1234567', login: 'ninja', name: 'Ninja' },
@@ -398,10 +437,47 @@ const generateMockStreams = (limit: number): TwitchStream[] => {
     { id: '0123456', login: 'lirik', name: 'LIRIK' }
   ];
   
-  return Array.from({ length: Math.min(limit, streamers.length) }, (_, i) => {
-    const streamer = streamers[i];
-    const game = games[Math.floor(Math.random() * games.length)];
+  // For Music category, use music streamers
+  const musicStreamers = [
+    { id: 'm123456', login: 'drlupo', name: 'MusicianOne' },
+    { id: 'm234567', login: 'nickeh30', name: 'DJ_Awesome' },
+    { id: 'm345678', login: 'clix', name: 'GuitarGod' },
+    { id: 'm456789', login: 'bugha', name: 'PianoPlayer' },
+    { id: 'm567890', login: 'mongraal', name: 'LiveBandHQ' },
+    { id: 'm678901', login: 'symfuhny', name: 'DrummerGirl' },
+    { id: 'm789012', login: 'myth', name: 'SaxophoneKing' },
+    { id: 'm890123', login: 'dakotaz', name: 'ViolinVirtuoso' },
+    { id: 'm901234', login: 'nickmercs', name: 'BeatMaster' },
+    { id: 'm012345', login: 'sypherpk', name: 'VocalDiva' }
+  ];
+  
+  // Choose streamers based on category
+  const streamersToUse = categoryId === '26936' ? musicStreamers : streamers;
+  
+  return Array.from({ length: Math.min(limit, streamersToUse.length) }, (_, i) => {
+    const streamer = streamersToUse[i];
+    // For specific category, always use that game. Otherwise pick randomly
+    const game = categoryId && categoryId !== 'all'
+      ? gamesToUse[0]
+      : gamesToUse[Math.floor(Math.random() * gamesToUse.length)];
+      
     const viewers = Math.floor(Math.random() * 50000) + 5000;
+    
+    // Make music titles more music-related
+    let title = '';
+    if (game.id === '26936') {
+      const musicTitles = [
+        `${streamer.name}'s Live Concert 🎵`,
+        `${streamer.name} - Live Jam Session 🎸`,
+        `${streamer.name} playing ${Math.random() < 0.5 ? 'requests' : 'originals'} 🎹`,
+        `LIVE Music with ${streamer.name} 🎤`,
+        `${streamer.name}'s Music Marathon 🎵`,
+        `Chill Music Stream with ${streamer.name} 🎧`
+      ];
+      title = musicTitles[Math.floor(Math.random() * musicTitles.length)];
+    } else {
+      title = `${streamer.name} playing ${game.name} - ${Math.random() < 0.3 ? 'INSANE GAMEPLAY!' : 'Chill stream with viewers'}`;
+    }
     
     return {
       id: `stream${i}`,
@@ -411,7 +487,7 @@ const generateMockStreams = (limit: number): TwitchStream[] => {
       game_id: game.id,
       game_name: game.name,
       type: 'live',
-      title: `${streamer.name} playing ${game.name} - ${Math.random() < 0.3 ? 'INSANE GAMEPLAY!' : 'Chill stream with viewers'}`,
+      title: title,
       viewer_count: viewers,
       started_at: new Date(Date.now() - Math.floor(Math.random() * 6 * 60 * 60 * 1000)).toISOString(),
       language: 'en',
@@ -494,7 +570,7 @@ const generateMockClips = (broadcasterId: string, limit: number): TwitchClip[] =
 /**
  * Generate mock viral moments for demo purposes
  */
-const generateMockViralMoments = (): {
+const generateMockViralMoments = (categoryId?: string): {
   id: string;
   streamerName: string;
   viewerCount: number;
@@ -503,8 +579,21 @@ const generateMockViralMoments = (): {
   thumbnailUrl: string;
   timestamp: string;
   viralScore: number;
+  gameId?: string;
+  gameName?: string;
 }[] => {
-  const streamers = [
+  // Generate different streamers based on category
+  const musicStreamers = [
+    { name: 'MusicianOne', viewers: 25000 },
+    { name: 'DJ_Awesome', viewers: 18000 },
+    { name: 'GuitarGod', viewers: 32000 },
+    { name: 'PianoPlayer', viewers: 15000 },
+    { name: 'LiveBandHQ', viewers: 29000 },
+    { name: 'DrummerGirl', viewers: 21000 },
+    { name: 'SaxophoneKing', viewers: 17000 },
+  ];
+  
+  const gamingStreamers = [
     { name: 'Ninja', viewers: 45000 },
     { name: 'Pokimane', viewers: 30000 },
     { name: 'shroud', viewers: 38000 },
@@ -513,6 +602,14 @@ const generateMockViralMoments = (): {
     { name: 'Sodapoppin', viewers: 22000 },
     { name: 'summit1g', viewers: 28000 }
   ];
+  
+  // Choose streamers and game name based on category
+  const streamers = categoryId === '26936' ? musicStreamers : gamingStreamers;
+  const gameName = categoryId === '26936' ? 'Music' : 
+                   categoryId === '509658' ? 'Just Chatting' :
+                   categoryId === '33214' ? 'Fortnite' :
+                   categoryId === '21779' ? 'League of Legends' :
+                   'Gaming';
   
   const hostname = window.location.hostname;
   
@@ -525,7 +622,7 @@ const generateMockViralMoments = (): {
                    Math.floor(Math.random() * 60),
                    Math.floor(Math.random() * 60));
     const timestamp = today.toISOString();
-    const clipId = `mock-viral-${i}`;
+    const clipId = `mock-viral-${categoryId || 'all'}-${i}`;
     const chatActivity = Math.floor(Math.random() * 150) + 50;
     
     // Calculate viral score for mock data too
@@ -542,9 +639,11 @@ const generateMockViralMoments = (): {
       viewerCount: streamer.viewers,
       chatActivity: chatActivity,
       clipUrl: `https://clips.twitch.tv/embed?clip=${clipId}&parent=${hostname}`,
-      thumbnailUrl: `https://picsum.photos/seed/viral${i}/640/360`,
+      thumbnailUrl: `https://picsum.photos/seed/viral${categoryId || 'all'}${i}/640/360`,
       timestamp: timestamp,
-      viralScore: viralScore
+      viralScore: viralScore,
+      gameId: categoryId || 'all',
+      gameName: gameName
     };
   });
 };
